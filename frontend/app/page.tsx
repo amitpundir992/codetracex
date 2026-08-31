@@ -1,4 +1,5 @@
 import './globals.css'
+import Link from 'next/link'
 
 export default function Home() {
   return (
@@ -14,15 +15,17 @@ export default function Home() {
         
         <div className="mt-12 p-8 bg-slate-800/50 rounded-lg border border-slate-700">
           <h2 className="text-xl font-semibold mb-4 text-slate-200">
-            Coming Soon
+            Phase 1: GitHub Repository Ingestion
           </h2>
-          <p className="text-slate-400">
-            Repository analysis and intelligence features will be added in future phases.
+          <p className="text-slate-400 mb-6">
+            Analyze public GitHub repositories and retrieve their metadata.
           </p>
-          <p className="text-slate-400 mt-2">
-            This platform will help you understand unfamiliar codebases, analyze dependencies, 
-            and answer questions about your repositories.
-          </p>
+          <Link 
+            href="/repository"
+            className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Analyze Repository
+          </Link>
         </div>
 
         <div className="mt-8 text-sm text-slate-500">

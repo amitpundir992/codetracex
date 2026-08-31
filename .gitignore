@@ -20,6 +20,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+DEVELOPMENT.md
 
 # Virtual Environment
 venv/
