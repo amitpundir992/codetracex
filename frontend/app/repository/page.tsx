@@ -34,6 +34,7 @@ export default function RepositoryPage() {
     try {
       // Simulate stage updates for better UX
       setTimeout(() => setLoadingStage('Scanning files...'), 2000);
+      setTimeout(() => setLoadingStage('Analyzing code structure...'), 4000);
       
       const result = await analyzeRepository(url.trim());
       setAnalysis(result);
@@ -212,6 +213,134 @@ export default function RepositoryPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Phase 3: Static Analysis Summary */}
+              {analysis.analysis_summary && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Static Code Analysis</CardTitle>
+                    <CardDescription>
+                      Deterministic code structure analysis
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                          Analyzed Files
+                        </p>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          {analysis.analysis_summary.analyzed_files}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          of {analysis.analysis_summary.total_files} total
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
+                        <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                          Symbols Extracted
+                        </p>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                          {analysis.analysis_summary.total_symbols}
+                        </p>
+                        <p className="text-xs text-purple-700 dark:text-purple-300">
+                          functions, classes, methods
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                        <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                          Imports
+                        </p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {analysis.analysis_summary.total_imports}
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300">
+                          dependencies detected
+                        </p>
+                      </div>
+
+                      <div className="p-4 bg-orange-50 dark:bg-orange-950 rounded-lg">
+                        <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                          Function Calls
+                        </p>
+                        <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                          {analysis.analysis_summary.total_calls}
+                        </p>
+                        <p className="text-xs text-orange-700 dark:text-orange-300">
+                          relationships found
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Symbol Types Breakdown */}
+                    {Object.keys(analysis.analysis_summary.symbols_by_type).length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold mb-3">Symbol Types</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {Object.entries(analysis.analysis_summary.symbols_by_type)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([type, count]) => (
+                              <div key={type} className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+                                <p className="text-xs font-medium text-muted-foreground capitalize">
+                                  {type}
+                                </p>
+                                <p className="text-xl font-bold">{count}</p>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Phase 3: Extracted Symbols Preview */}
+              {analysis.symbols && analysis.symbols.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Extracted Symbols</CardTitle>
+                    <CardDescription>
+                      Functions, classes, and methods found in the codebase (showing up to 50)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {analysis.symbols.map((symbol, index) => (
+                        <div
+                          key={index}
+                          className="p-3 bg-slate-50 dark:bg-slate-900 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-semibold text-sm">
+                                  {symbol.name}
+                                </span>
+                                <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded">
+                                  {symbol.type}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {symbol.language}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 font-mono">
+                                {symbol.file} : Lines {symbol.start_line}-{symbol.end_line}
+                              </p>
+                              {symbol.parent && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Parent: <span className="font-mono">{symbol.parent}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Files List */}
               <Card>

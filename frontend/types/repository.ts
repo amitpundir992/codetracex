@@ -37,6 +37,43 @@ export interface FileInfo {
   is_sensitive: boolean;
 }
 
+// Phase 3: Static Code Analysis Types
+
+export interface Symbol {
+  name: string;
+  type: string;
+  language: string;
+  file: string;
+  start_line: number;
+  end_line: number;
+  parent: string | null;
+}
+
+export interface Import {
+  file: string;
+  source: string;
+  names: string[];
+  line: number;
+}
+
+export interface Call {
+  file: string;
+  caller: string;
+  callee: string;
+  line: number;
+}
+
+export interface AnalysisSummary {
+  total_files: number;
+  analyzed_files: number;
+  skipped_files: number;
+  failed_files: number;
+  total_symbols: number;
+  symbols_by_type: Record<string, number>;
+  total_imports: number;
+  total_calls: number;
+}
+
 export interface RepositoryAnalysisResponse {
   repository: string;
   status: string;
@@ -46,4 +83,9 @@ export interface RepositoryAnalysisResponse {
   files: FileInfo[];
   files_returned: number;
   note: string | null;
+  // Phase 3: Static analysis results
+  analysis_summary?: AnalysisSummary;
+  symbols?: Symbol[];
+  imports?: Import[];
+  calls?: Call[];
 }
