@@ -6,7 +6,7 @@ CodeTraceX is designed to help developers understand unfamiliar repositories by 
 
 ## 🎯 Project Status
 
-**Current Phase:** Phase 2 — Repository Download & File Scanner ✅
+**Current Phase:** Phase 3 — Static Code Analysis ✅
 
 CodeTraceX is being built incrementally with a focus on deterministic analysis before LLM integration.
 
@@ -34,10 +34,19 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 - Temporary workspace with automatic cleanup
 - Comprehensive test coverage (83 tests passing)
 
+**Phase 3: Static Code Analysis**
+- Python AST analyzer for .py files
+- Tree-sitter analyzer for .js, .jsx, .ts, .tsx files
+- Symbol extraction (functions, classes, methods)
+- Import statement detection
+- Function call mapping
+- Multi-language support (Python, JavaScript, TypeScript)
+- Common symbol representation across languages
+- Deterministic parsing without code execution
+- Comprehensive test coverage
+
 ### Planned 🚧
-- Source code parsing (Tree-sitter, Python AST)
-- API endpoint detection
-- Dependency graph analysis
+- Database persistence (PostgreSQL)
 - Knowledge graph construction
 - Vector embeddings with pgvector
 - RAG-based question answering
@@ -51,6 +60,8 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 ### Backend
 - **FastAPI** - Modern Python web framework
 - **Python 3.11+** - Programming language
+- **Tree-sitter** - Multi-language code parser
+- **Python AST** - Python code analysis
 - PostgreSQL (planned) - Primary database
 - pgvector (planned) - Vector similarity search
 - Redis (planned) - Caching and job queue
@@ -61,7 +72,6 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 - **Tailwind CSS** - Utility-first CSS framework
 
 ### Future Additions
-- Tree-sitter - Source code parsing
 - Background workers - Async job processing
 - LLM integration - Natural language understanding
 - Docker - Containerization
@@ -279,18 +289,18 @@ docker-compose up
    - URL validation and parsing
    - Repository metadata retrieval
 
-3. **Phase 2: Repository Download & File Scanner** ✅ (Current)
+3. **Phase 2: Repository Download & File Scanner** ✅
    - Repository archive download
    - Safe ZIP extraction
    - File scanning and metadata collection
 
-4. **Phase 3: Static Code Analysis** (Next)
+4. **Phase 3: Static Code Analysis** ✅
    - Tree-sitter integration
    - Python AST parsing
    - Symbol extraction
    - Dependency mapping
 
-5. **Phase 4: Database & Storage**
+5. **Phase 4: Database & Storage** (Next)
    - PostgreSQL setup
    - Database models
    - Knowledge graph schema
