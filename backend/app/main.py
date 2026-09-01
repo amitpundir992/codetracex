@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import repositories
+from app.api import repositories, analysis
+from app.core.config import get_settings
+
+settings = get_settings()
 
 app = FastAPI(
     title="CodeTraceX API",
@@ -8,10 +11,10 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# CORS middleware - will be configured properly later
+# CORS middleware configured from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js default port
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,6 +22,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(repositories.router)
+app.include_router(analysis.router)
 
 
 @app.get("/health")
