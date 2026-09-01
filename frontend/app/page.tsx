@@ -1,4 +1,3 @@
-import './globals.css'
 import Link from 'next/link'
 
 export default function Home() {
@@ -15,10 +14,10 @@ export default function Home() {
         
         <div className="mt-12 p-8 bg-slate-800/50 rounded-lg border border-slate-700">
           <h2 className="text-xl font-semibold mb-4 text-slate-200">
-            Phase 1: GitHub Repository Ingestion
+            Phase 2: Repository Download & File Scanner
           </h2>
           <p className="text-slate-400 mb-6">
-            Analyze public GitHub repositories and retrieve their metadata.
+            Download and analyze GitHub repositories. Scan files, detect languages, and collect metadata.
           </p>
           <Link 
             href="/repository"
