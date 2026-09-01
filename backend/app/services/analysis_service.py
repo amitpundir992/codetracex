@@ -7,9 +7,10 @@ This service orchestrates the complete repository analysis workflow:
 3. Download repository archive
 4. Extract archive safely
 5. Scan files and collect metadata
-6. Clean up temporary files
+6. Run static code analysis (Phase 3)
+7. Clean up temporary files
 
-This is the main entry point for Phase 2 functionality.
+This is the main entry point for Phase 2 and Phase 3 functionality.
 """
 import tempfile
 import shutil
@@ -20,6 +21,7 @@ from app.core.config import get_settings
 from app.services.repository_service import RepositoryService
 from app.services.download_service import RepositoryDownloadService
 from app.services.scanner_service import FileScannerService
+from app.services.static_analyzer import StaticAnalyzer
 from app.utils.zip_utils import safe_extract, find_repository_root
 
 
@@ -37,6 +39,7 @@ class RepositoryAnalysisService:
         self.scanner_service = FileScannerService(
             max_files=settings.MAX_REPOSITORY_FILES
         )
+        self.static_analyzer = StaticAnalyzer()
     
     async def analyze_repository(self, url: str) -> Dict[str, Any]:
         """
@@ -49,9 +52,10 @@ class RepositoryAnalysisService:
         4. Download the repository archive
         5. Extract the archive safely
         6. Find the repository root
-        7. Scan all files and collect metadata
-        8. Clean up temporary files (even if errors occur)
-        9. Return structured analysis results
+        7. Scan all files and collect metadata (Phase 2)
+        8. Run static code analysis on source files (Phase 3)
+        9. Clean up temporary files (even if errors occur)
+        10. Return structured analysis results
         
         The temporary workspace is automatically cleaned up using a context manager,
         ensuring cleanup happens even if an exception occurs during processing.
@@ -64,6 +68,7 @@ class RepositoryAnalysisService:
                 - repository: Repository identifier (owner/name)
                 - metadata: Repository metadata from GitHub
                 - scan_result: File scanning results with metadata
+                - static_analysis: Static code analysis results (Phase 3)
                 
         Raises:
             InvalidRepositoryURLError: If URL is invalid
@@ -82,7 +87,7 @@ class RepositoryAnalysisService:
         default_branch = metadata["default_branch"]
         repository_id = f"{owner}/{repository_name}"
         
-        # Step 3-8: Use temporary directory for download and extraction
+        # Step 3-9: Use temporary directory for download and extraction
         # The 'with' statement ensures cleanup happens automatically
         with tempfile.TemporaryDirectory(prefix="codetracex_") as temp_dir:
             temp_path = Path(temp_dir)
@@ -104,12 +109,29 @@ class RepositoryAnalysisService:
             
             # Step 7: Scan files
             scan_result = self.scanner_service.scan_directory(repo_root)
+            
+            # Step 8: Run static code analysis on scanned files
+            # Convert FileMetadata objects to Path objects for analysis
+            file_paths = [
+                repo_root / file_meta.path 
+                for file_meta in scan_result.files
+            ]
+            
+            static_analysis_result = self.static_analyzer.analyze_repository(
+                repo_root=repo_root,
+                files=file_paths
+            )
+            
+            # Update summary with import and call counts
+            static_analysis_result.summary.total_imports = len(static_analysis_result.all_imports)
+            static_analysis_result.summary.total_calls = len(static_analysis_result.all_calls)
         
         # Temporary directory is automatically deleted here
         
-        # Step 9: Return structured results
+        # Step 10: Return structured results
         return {
             "repository": repository_id,
             "metadata": metadata,
-            "scan_result": scan_result
+            "scan_result": scan_result,
+            "static_analysis": static_analysis_result
         }

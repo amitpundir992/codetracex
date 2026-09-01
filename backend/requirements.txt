@@ -2,6 +2,12 @@
 fastapi==0.115.0
 uvicorn[standard]==0.31.0
 
+# Static Code Analysis
+tree-sitter==0.21.3
+tree-sitter-python==0.21.0
+tree-sitter-javascript==0.21.4
+tree-sitter-typescript==0.21.2
+
 # Development
 pytest==9.1.1
 pytest-asyncio==1.4.0

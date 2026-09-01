@@ -1,14 +1,19 @@
 """
 API endpoint for repository analysis.
 
-This module provides the Phase 2 endpoint for analyzing GitHub repositories.
-It coordinates downloading, extracting, and scanning repositories to collect
-file metadata.
+This module provides the Phase 2 and Phase 3 endpoint for analyzing GitHub repositories.
+It coordinates downloading, extracting, scanning, and static code analysis.
 """
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.repository import RepositoryRequest
-from app.schemas.analysis import RepositoryAnalysisResponse, FileInfo
+from app.schemas.analysis import (
+    RepositoryAnalysisResponse,
+    FileInfo,
+    Symbol,
+    Import,
+    Call
+)
 from app.services.analysis_service import RepositoryAnalysisService
 from app.services.repository_service import InvalidRepositoryURLError
 from app.services.github_service import GitHubAPIError, RepositoryNotFoundError
@@ -29,12 +34,21 @@ async def analyze_repository(request: RepositoryRequest):
     1. Validates the repository URL
     2. Downloads the repository archive (without .git history)
     3. Extracts the archive safely with path traversal protection
-    4. Scans all files and collects metadata
-    5. Returns file statistics and language distribution
-    6. Automatically cleans up temporary files
+    4. Scans all files and collects metadata (Phase 2)
+    5. Performs static code analysis on source files (Phase 3)
+    6. Returns file statistics, language distribution, and code symbols
+    7. Automatically cleans up temporary files
     
     The repository is downloaded into a temporary workspace and deleted
     after analysis. No repository data is permanently stored on the server.
+    
+    **Phase 3: Static Code Analysis**
+    - Extracts functions, classes, methods from Python, JavaScript, TypeScript
+    - Identifies import statements and dependencies
+    - Maps function calls (syntactically)
+    - Uses Python AST for .py files
+    - Uses Tree-sitter for .js, .jsx, .ts, .tsx files
+    - Never executes repository code (security)
     
     **Size Limits:**
     - Maximum repository download size: configured in MAX_REPOSITORY_SIZE_MB
@@ -44,6 +58,7 @@ async def analyze_repository(request: RepositoryRequest):
     - ZIP archives are validated for path traversal attacks
     - Binary files are automatically skipped
     - Sensitive files (.env, credentials) are flagged but not exposed
+    - Source code is parsed but never executed
     
     Args:
         request: Repository request containing the GitHub URL
@@ -53,6 +68,8 @@ async def analyze_repository(request: RepositoryRequest):
         - Total file count and size
         - Language distribution
         - List of scanned files with metadata
+        - Static analysis summary (symbols, imports, calls)
+        - Preview of extracted symbols
         
     Raises:
         400 Bad Request: Invalid GitHub URL
@@ -60,6 +77,7 @@ async def analyze_repository(request: RepositoryRequest):
         413 Payload Too Large: Repository exceeds size or file limits
         500 Internal Server Error: Other errors during processing
     """
+    print(f"\n=== ENDPOINT CALLED ===\nAnalyzing: {request.url}\n")
     analysis_service = RepositoryAnalysisService()
     
     try:
@@ -69,6 +87,7 @@ async def analyze_repository(request: RepositoryRequest):
         # Extract results
         repository = result["repository"]
         scan_result = result["scan_result"]
+        static_analysis = result["static_analysis"]
         
         # Convert file metadata to response format
         # Limit the number of files returned in the response
@@ -96,6 +115,12 @@ async def analyze_repository(request: RepositoryRequest):
         if len(files) < scan_result.total_files:
             note = f"Showing first {len(files)} files out of {scan_result.total_files} total files"
         
+        # Limit static analysis results for API response
+        # Return preview of symbols (top 50), imports (top 50), calls (top 50)
+        symbols_preview = static_analysis.all_symbols[:50]
+        imports_preview = static_analysis.all_imports[:50]
+        calls_preview = static_analysis.all_calls[:50]
+        
         return RepositoryAnalysisResponse(
             repository=repository,
             status="completed",
@@ -104,7 +129,12 @@ async def analyze_repository(request: RepositoryRequest):
             languages=scan_result.languages,
             files=files,
             files_returned=len(files),
-            note=note
+            note=note,
+            # Phase 3: Static analysis results
+            analysis_summary=static_analysis.summary,
+            symbols=symbols_preview,
+            imports=imports_preview,
+            calls=calls_preview
         )
         
     except InvalidRepositoryURLError as e:
