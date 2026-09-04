@@ -1,10 +1,11 @@
 """
 API endpoint for repository analysis.
 
-This module provides the Phase 2 and Phase 3 endpoint for analyzing GitHub repositories.
-It coordinates downloading, extracting, scanning, and static code analysis.
+This module provides the Phase 2, Phase 3, and Phase 4 endpoint for analyzing GitHub repositories.
+It coordinates downloading, extracting, scanning, static code analysis, and database persistence.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from sqlalchemy.orm import Session
 
 from app.schemas.repository import RepositoryRequest
 from app.schemas.analysis import (
@@ -20,13 +21,14 @@ from app.services.github_service import GitHubAPIError, RepositoryNotFoundError
 from app.services.download_service import DownloadTooLargeError, DownloadError
 from app.services.scanner_service import TooManyFilesError
 from app.utils.zip_utils import UnsafeZipError, InvalidZipError
+from app.db import get_db
 
 
 router = APIRouter(prefix="/api/repositories", tags=["repositories"])
 
 
 @router.post("/analyze", response_model=RepositoryAnalysisResponse, status_code=status.HTTP_200_OK)
-async def analyze_repository(request: RepositoryRequest):
+async def analyze_repository(request: RepositoryRequest, db: Session = Depends(get_db)):
     """
     Analyze a GitHub repository.
     
@@ -36,11 +38,12 @@ async def analyze_repository(request: RepositoryRequest):
     3. Extracts the archive safely with path traversal protection
     4. Scans all files and collects metadata (Phase 2)
     5. Performs static code analysis on source files (Phase 3)
-    6. Returns file statistics, language distribution, and code symbols
-    7. Automatically cleans up temporary files
+    6. Persists results to PostgreSQL database (Phase 4)
+    7. Returns file statistics, language distribution, and code symbols
+    8. Automatically cleans up temporary files
     
     The repository is downloaded into a temporary workspace and deleted
-    after analysis. No repository data is permanently stored on the server.
+    after analysis. Structured intelligence is persisted to PostgreSQL.
     
     **Phase 3: Static Code Analysis**
     - Extracts functions, classes, methods from Python, JavaScript, TypeScript
@@ -49,6 +52,13 @@ async def analyze_repository(request: RepositoryRequest):
     - Uses Python AST for .py files
     - Uses Tree-sitter for .js, .jsx, .ts, .tsx files
     - Never executes repository code (security)
+    
+    **Phase 4: PostgreSQL Persistence**
+    - Repository metadata saved to database
+    - Analysis run created with unique ID
+    - Files, symbols, imports, calls persisted
+    - Relationships between symbols tracked
+    - Transaction-based persistence (all-or-nothing)
     
     **Size Limits:**
     - Maximum repository download size: configured in MAX_REPOSITORY_SIZE_MB
@@ -62,6 +72,7 @@ async def analyze_repository(request: RepositoryRequest):
     
     Args:
         request: Repository request containing the GitHub URL
+        db: Database session (injected by FastAPI)
         
     Returns:
         Repository analysis results including:
@@ -70,6 +81,8 @@ async def analyze_repository(request: RepositoryRequest):
         - List of scanned files with metadata
         - Static analysis summary (symbols, imports, calls)
         - Preview of extracted symbols
+        - Analysis run ID (Phase 4)
+        - Repository ID (Phase 4)
         
     Raises:
         400 Bad Request: Invalid GitHub URL
@@ -78,7 +91,9 @@ async def analyze_repository(request: RepositoryRequest):
         500 Internal Server Error: Other errors during processing
     """
     print(f"\n=== ENDPOINT CALLED ===\nAnalyzing: {request.url}\n")
-    analysis_service = RepositoryAnalysisService()
+    
+    # Create analysis service with database session (Phase 4)
+    analysis_service = RepositoryAnalysisService(db=db)
     
     try:
         # Perform the complete analysis workflow

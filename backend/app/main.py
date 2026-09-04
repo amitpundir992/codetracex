@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import repositories, analysis
+from app.api import repositories, analysis, retrieval
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -23,6 +23,7 @@ app.add_middleware(
 # Include routers
 app.include_router(repositories.router)
 app.include_router(analysis.router)
+app.include_router(retrieval.router)  # Phase 4: Retrieval endpoints
 
 
 @app.get("/health")
