@@ -12,9 +12,13 @@ services:
       - APP_ENV=development
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
+      - DATABASE_URL=postgresql+psycopg://codetracex_user:codetracex_dev_password@postgres:5432/codetracex
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -30,4 +34,26 @@ services:
       - /app/node_modules
     command: npm run dev
 
-# Additional services like PostgreSQL, Redis, and workers will be added later
+  # PostgreSQL database for repository intelligence storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: codetracex-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=codetracex
+      - POSTGRES_USER=codetracex_user
+      - POSTGRES_PASSWORD=codetracex_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codetracex_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+
+# Additional services like Redis and workers will be added later

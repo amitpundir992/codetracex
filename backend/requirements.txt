@@ -2,6 +2,11 @@
 fastapi==0.115.0
 uvicorn[standard]==0.31.0
 
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.1
+psycopg[binary]==3.2.3
+
 # Static Code Analysis
 tree-sitter==0.21.3
 tree-sitter-python==0.21.0
