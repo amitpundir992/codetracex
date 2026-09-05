@@ -6,7 +6,7 @@ CodeTraceX is designed to help developers understand unfamiliar repositories by 
 
 ## 🎯 Project Status
 
-**Current Phase:** Phase 3 — Static Code Analysis ✅
+**Current Phase:** Phase 4 — PostgreSQL Database Persistence ✅
 
 CodeTraceX is being built incrementally with a focus on deterministic analysis before LLM integration.
 
@@ -45,8 +45,17 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 - Deterministic parsing without code execution
 - Comprehensive test coverage
 
+**Phase 4: Database & Persistence**
+- PostgreSQL integration with Neon serverless database
+- SQLAlchemy ORM with 7 database models
+- Alembic migrations for schema management
+- Persistence service for storing analysis results
+- Retrieval API endpoints for querying data
+- Database connection pooling
+- Automatic schema creation and updates
+- Comprehensive database tests
+
 ### Planned 🚧
-- Database persistence (PostgreSQL)
 - Knowledge graph construction
 - Vector embeddings with pgvector
 - RAG-based question answering
@@ -60,9 +69,12 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 ### Backend
 - **FastAPI** - Modern Python web framework
 - **Python 3.11+** - Programming language
+- **PostgreSQL** - Primary database (Neon serverless)
+- **SQLAlchemy** - ORM for database operations
+- **Alembic** - Database migration tool
 - **Tree-sitter** - Multi-language code parser
 - **Python AST** - Python code analysis
-- PostgreSQL (planned) - Primary database
+- **python-dotenv** - Environment variable management
 - pgvector (planned) - Vector similarity search
 - Redis (planned) - Caching and job queue
 
@@ -70,11 +82,13 @@ CodeTraceX is being built incrementally with a focus on deterministic analysis b
 - **Next.js 14** - React framework with App Router
 - **TypeScript** - Type-safe JavaScript
 - **Tailwind CSS** - Utility-first CSS framework
+- **shadcn/ui** - UI component library
 
-### Future Additions
-- Background workers - Async job processing
-- LLM integration - Natural language understanding
-- Docker - Containerization
+### Database Schema
+- **7 Tables**: repositories, analysis_runs, files, symbols, imports, calls, relationships
+- **UUID Primary Keys** - For all tables
+- **Cascade Deletes** - Maintain referential integrity
+- **Enum Types** - Type-safe status fields
 
 ## 📁 Repository Structure
 
@@ -85,12 +99,16 @@ CodeTraceX/
 │   │   ├── main.py       # FastAPI application entry point
 │   │   ├── api/          # API route handlers
 │   │   ├── core/         # Configuration and settings
-│   │   ├── models/       # Database models (future)
+│   │   ├── db/           # Database models and session
 │   │   ├── schemas/      # Pydantic schemas for validation
 │   │   ├── services/     # Business logic layer
 │   │   └── utils/        # Helper functions
+│   ├── alembic/          # Database migrations
+│   ├── scripts/          # Utility scripts
 │   ├── tests/            # Backend tests
 │   ├── requirements.txt  # Python dependencies
+│   ├── alembic.ini       # Alembic configuration
+│   ├── pytest.ini        # Pytest configuration
 │   └── .env.example      # Environment variable template
 │
 ├── frontend/             # Next.js frontend
@@ -102,9 +120,6 @@ CodeTraceX/
 │   ├── package.json      # Node dependencies
 │   └── .env.example      # Environment variable template
 │
-├── docs/                 # Documentation (future)
-├── docker/               # Docker configuration (future)
-├── docker-compose.yml    # Multi-container orchestration
 ├── .gitignore            # Git ignore rules
 └── README.md             # This file
 ```
@@ -115,15 +130,16 @@ CodeTraceX/
 - Python 3.11 or higher
 - Node.js 18 or higher
 - npm or yarn
+- PostgreSQL database (we use Neon serverless, but any PostgreSQL 14+ works)
 
 ### Backend Setup
 
-1. Navigate to the backend directory:
+1. **Navigate to the backend directory:**
 ```bash
 cd backend
 ```
 
-2. Create and activate a virtual environment:
+2. **Create and activate a virtual environment:**
 
 **Windows:**
 ```bash
@@ -137,48 +153,129 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-3. Install dependencies:
+3. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Create environment file:
+4. **Set up environment variables:**
 ```bash
-copy .env.example .env  # Windows
-cp .env.example .env    # macOS/Linux
+# Windows
+copy .env.example .env
+
+# macOS/Linux
+cp .env.example .env
 ```
 
-5. Start the FastAPI development server:
+5. **Configure your database:**
+
+Edit `backend/.env` and update the `DATABASE_URL`:
+
+```env
+# For Neon (recommended for development):
+DATABASE_URL=postgresql+psycopg://user:password@host/database?sslmode=require
+
+# For local PostgreSQL:
+DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/codetracex
+```
+
+**Option A: Using Neon (Serverless PostgreSQL)**
+- Sign up at [neon.tech](https://neon.tech) (free tier available)
+- Create a new project
+- Copy the connection string to your `.env` file
+
+**Option B: Using Local PostgreSQL**
+- Install PostgreSQL 14+
+- Create a database: `CREATE DATABASE codetracex;`
+- Update `DATABASE_URL` in `.env`
+
+6. **Run database migrations:**
+```bash
+alembic upgrade head
+```
+
+This will create all necessary tables (repositories, analysis_runs, files, symbols, imports, calls, relationships).
+
+7. **Start the FastAPI development server:**
 ```bash
 uvicorn app.main:app --reload
 ```
 
 The backend will be available at `http://localhost:8000`
 
+**Verify installation:**
+- Visit `http://localhost:8000/health` - Should return `{"status":"ok"}`
+- Visit `http://localhost:8000/docs` - Interactive API documentation
+
 ### Frontend Setup
 
-1. Navigate to the frontend directory:
+1. **Navigate to the frontend directory:**
 ```bash
 cd frontend
 ```
 
-2. Install dependencies:
+2. **Install dependencies:**
 ```bash
 npm install
 ```
 
-3. Create environment file:
+3. **Create environment file:**
 ```bash
-copy .env.example .env.local  # Windows
-cp .env.example .env.local    # macOS/Linux
+# Windows
+copy .env.example .env.local
+
+# macOS/Linux
+cp .env.example .env.local
 ```
 
-4. Start the Next.js development server:
+4. **Configure API endpoint (optional):**
+
+Edit `frontend/.env.local` if your backend runs on a different port:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+5. **Start the Next.js development server:**
 ```bash
 npm run dev
 ```
 
 The frontend will be available at `http://localhost:3000`
+
+### Running Tests
+
+**Backend tests:**
+```bash
+cd backend
+pytest                    # Run all tests
+pytest tests/test_database_models.py -v  # Run specific test file
+```
+
+**Frontend tests:**
+```bash
+cd frontend
+npm test
+```
+
+### Common Issues & Troubleshooting
+
+**Database connection errors:**
+- Verify your `DATABASE_URL` is correct in `.env`
+- Ensure PostgreSQL is running (if using local DB)
+- Check firewall settings for Neon cloud connections
+
+**Migration errors:**
+- Reset database: `python scripts/reset_database.py` (dev only)
+- Re-run migrations: `alembic upgrade head`
+
+**Module import errors:**
+- Ensure virtual environment is activated
+- Reinstall dependencies: `pip install -r requirements.txt`
+
+**Port already in use:**
+- Backend: Change `APP_PORT` in `.env` or use `uvicorn app.main:app --port 8001`
+- Frontend: Use `npm run dev -- -p 3001`
 
 ## 📡 API Endpoints
 
@@ -226,6 +323,7 @@ The frontend will be available at `http://localhost:3000`
 **POST** `/api/repositories/analyze`
 - Download and analyze a GitHub repository
 - Scans files, detects languages, collects metadata
+- Persists analysis results to database
 - Returns file statistics and language distribution
 
 **Request:**
@@ -240,6 +338,8 @@ The frontend will be available at `http://localhost:3000`
 {
   "repository": "facebook/react",
   "status": "completed",
+  "repository_id": "uuid-here",
+  "analysis_run_id": "uuid-here",
   "total_files": 1200,
   "total_size_bytes": 12845678,
   "languages": {
@@ -251,31 +351,36 @@ The frontend will be available at `http://localhost:3000`
 }
 ```
 
+**GET** `/api/retrieval/repositories`
+- List all analyzed repositories with their latest analysis
+- Supports pagination
+
+**Query Parameters:**
+- `limit` (optional): Number of results per page (default: 50)
+- `offset` (optional): Number of results to skip (default: 0)
+
+**GET** `/api/retrieval/repositories/{repository_id}`
+- Get detailed information about a specific repository
+
+**GET** `/api/retrieval/repositories/{repository_id}/latest-analysis`
+- Get the most recent analysis run for a repository
+
+**GET** `/api/retrieval/repositories/{repository_id}/analyses`
+- Get all analysis runs for a repository (paginated)
+
+**GET** `/api/retrieval/symbols/search`
+- Search for code symbols across all analyzed repositories
+
+**Query Parameters:**
+- `name` (optional): Symbol name pattern
+- `symbol_type` (optional): Filter by type (function, class, method, etc.)
+- `language` (optional): Filter by programming language
+- `limit` (optional): Results per page
+- `offset` (optional): Results to skip
+
 **GET** `/docs`
 - Interactive API documentation (Swagger UI)
 - Automatically generated by FastAPI
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-cd backend
-pytest
-```
-
-### Frontend Tests
-```bash
-cd frontend
-npm test
-```
-
-## 🐳 Docker (Optional)
-
-Note: Docker configuration will be completed in a future phase.
-
-```bash
-docker-compose up
-```
 
 ## 🛣️ Development Roadmap
 
