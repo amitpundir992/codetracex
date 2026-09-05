@@ -204,3 +204,7 @@ class RepositoryAnalysisResponse(BaseModel):
     symbols: Optional[List[Symbol]] = Field(None, description="Extracted symbols (limited preview)")
     imports: Optional[List[Import]] = Field(None, description="Extracted imports (limited preview)")
     calls: Optional[List[Call]] = Field(None, description="Extracted calls (limited preview)")
+    
+    # Phase 4: Database Persistence IDs
+    repository_id: Optional[str] = Field(None, description="UUID of persisted repository record")
+    analysis_run_id: Optional[str] = Field(None, description="UUID of persisted analysis run")

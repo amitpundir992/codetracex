@@ -149,7 +149,10 @@ async def analyze_repository(request: RepositoryRequest, db: Session = Depends(g
             analysis_summary=static_analysis.summary,
             symbols=symbols_preview,
             imports=imports_preview,
-            calls=calls_preview
+            calls=calls_preview,
+            # Phase 4: Database persistence IDs
+            repository_id=result.get("repository_id"),
+            analysis_run_id=result.get("analysis_run_id")
         )
         
     except InvalidRepositoryURLError as e:

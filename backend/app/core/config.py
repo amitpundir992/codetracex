@@ -3,6 +3,13 @@ Application configuration loaded from environment variables.
 """
 import os
 from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env file from backend directory
+env_path = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings:
