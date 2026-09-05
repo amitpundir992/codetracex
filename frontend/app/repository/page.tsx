@@ -147,6 +147,20 @@ export default function RepositoryPage() {
                     <p className="text-sm text-muted-foreground">
                       Status: {analysis.status}
                     </p>
+                    {(analysis.repository_id || analysis.analysis_run_id) && (
+                      <div className="mt-2 space-y-1">
+                        {analysis.repository_id && (
+                          <p className="text-xs text-muted-foreground font-mono">
+                            Repository ID: {analysis.repository_id}
+                          </p>
+                        )}
+                        {analysis.analysis_run_id && (
+                          <p className="text-xs text-muted-foreground font-mono">
+                            Analysis Run ID: {analysis.analysis_run_id}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

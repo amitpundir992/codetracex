@@ -88,4 +88,7 @@ export interface RepositoryAnalysisResponse {
   symbols?: Symbol[];
   imports?: Import[];
   calls?: Call[];
+  // Phase 4: Database persistence IDs
+  repository_id?: string;
+  analysis_run_id?: string;
 }
