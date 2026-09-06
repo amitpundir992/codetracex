@@ -11,13 +11,22 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.db import get_db
-from app.db.models import Repository, AnalysisRun, Symbol, AnalysisStatus
+from app.db.models import Repository, AnalysisRun, Symbol, File, AnalysisStatus
 from app.schemas.analysis import (
     RepositoryAnalysisResponse,
     AnalysisSummary,
     FileInfo,
-    Symbol as SymbolSchema
+    Symbol as SymbolSchema,
+    SymbolCallersResponse,
+    SymbolCalleesResponse,
+    SymbolDependenciesResponse,
+    SymbolDependentsResponse,
+    FileDependenciesResponse,
+    FileDependentsResponse,
+    ImpactAnalysisResponse,
+    GraphEdge as GraphEdgeSchema
 )
+from app.services.graph_service import GraphService
 from pydantic import BaseModel
 
 
@@ -326,3 +335,494 @@ def list_symbols(
         )
         for symbol in symbols
     ]
+
+
+# ============================================================================
+# Phase 5: Graph Query Endpoints
+# ============================================================================
+
+
+@router.get("/{repository_id}/symbols/{symbol_id}/callers", response_model=SymbolCallersResponse)
+def get_symbol_callers(
+    repository_id: UUID,
+    symbol_id: UUID,
+    depth: int = Query(1, ge=1, le=10, description="Traversal depth (1-10)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get symbols that call the specified symbol.
+    
+    Returns the reverse call graph (who calls this symbol).
+    
+    Args:
+        repository_id: Repository UUID
+        symbol_id: Symbol UUID
+        depth: Traversal depth (default: 1 for direct callers, max: 10)
+        db: Database session
+        
+    Returns:
+        List of caller relationships
+        
+    Raises:
+        404: Symbol not found
+    """
+    # Verify symbol exists and belongs to repository
+    symbol = db.query(Symbol).filter(Symbol.id == symbol_id).first()
+    if not symbol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} not found"
+        )
+    
+    # Verify symbol belongs to this repository
+    analysis_run = db.query(AnalysisRun).filter(
+        AnalysisRun.id == symbol.analysis_run_id,
+        AnalysisRun.repository_id == repository_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get callers using graph service
+    graph_service = GraphService(db)
+    caller_edges = graph_service.get_symbol_callers(symbol_id, depth)
+    
+    # Convert to response schema
+    callers = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in caller_edges
+    ]
+    
+    # Count unique caller symbols
+    unique_callers = set(edge.source.id for edge in caller_edges)
+    
+    return SymbolCallersResponse(
+        symbol_id=str(symbol_id),
+        symbol_name=symbol.name,
+        depth=depth,
+        callers=callers,
+        total_callers=len(unique_callers)
+    )
+
+
+@router.get("/{repository_id}/symbols/{symbol_id}/callees", response_model=SymbolCalleesResponse)
+def get_symbol_callees(
+    repository_id: UUID,
+    symbol_id: UUID,
+    depth: int = Query(1, ge=1, le=10, description="Traversal depth (1-10)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get symbols that the specified symbol calls.
+    
+    Returns the forward call graph (what this symbol calls).
+    
+    Args:
+        repository_id: Repository UUID
+        symbol_id: Symbol UUID
+        depth: Traversal depth (default: 1 for direct callees, max: 10)
+        db: Database session
+        
+    Returns:
+        List of callee relationships
+        
+    Raises:
+        404: Symbol not found
+    """
+    # Verify symbol exists and belongs to repository
+    symbol = db.query(Symbol).filter(Symbol.id == symbol_id).first()
+    if not symbol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} not found"
+        )
+    
+    # Verify symbol belongs to this repository
+    analysis_run = db.query(AnalysisRun).filter(
+        AnalysisRun.id == symbol.analysis_run_id,
+        AnalysisRun.repository_id == repository_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get callees using graph service
+    graph_service = GraphService(db)
+    callee_edges = graph_service.get_symbol_callees(symbol_id, depth)
+    
+    # Convert to response schema
+    callees = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in callee_edges
+    ]
+    
+    # Count unique callee symbols
+    unique_callees = set(edge.target.id for edge in callee_edges)
+    
+    return SymbolCalleesResponse(
+        symbol_id=str(symbol_id),
+        symbol_name=symbol.name,
+        depth=depth,
+        callees=callees,
+        total_callees=len(unique_callees)
+    )
+
+
+@router.get("/{repository_id}/symbols/{symbol_id}/dependencies", response_model=SymbolDependenciesResponse)
+def get_symbol_dependencies(
+    repository_id: UUID,
+    symbol_id: UUID,
+    depth: int = Query(1, ge=1, le=10, description="Traversal depth (1-10)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all dependencies of a symbol.
+    
+    Dependencies include:
+    - Functions/methods this symbol calls
+    - Modules this symbol's file imports
+    
+    Args:
+        repository_id: Repository UUID
+        symbol_id: Symbol UUID
+        depth: Traversal depth
+        db: Database session
+        
+    Returns:
+        Symbol dependencies grouped by type
+        
+    Raises:
+        404: Symbol not found
+    """
+    # Verify symbol exists and belongs to repository
+    symbol = db.query(Symbol).filter(Symbol.id == symbol_id).first()
+    if not symbol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} not found"
+        )
+    
+    # Verify symbol belongs to this repository
+    analysis_run = db.query(AnalysisRun).filter(
+        AnalysisRun.id == symbol.analysis_run_id,
+        AnalysisRun.repository_id == repository_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get dependencies using graph service
+    graph_service = GraphService(db)
+    dependencies = graph_service.get_symbol_dependencies(symbol_id, depth)
+    
+    # Convert to response schema
+    call_edges = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependencies["calls"]
+    ]
+    
+    import_edges = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependencies["imports"]
+    ]
+    
+    total = len(call_edges) + len(import_edges)
+    
+    return SymbolDependenciesResponse(
+        symbol_id=str(symbol_id),
+        symbol_name=symbol.name,
+        depth=depth,
+        calls=call_edges,
+        imports=import_edges,
+        total_dependencies=total
+    )
+
+
+@router.get("/{repository_id}/symbols/{symbol_id}/dependents", response_model=SymbolDependentsResponse)
+def get_symbol_dependents(
+    repository_id: UUID,
+    symbol_id: UUID,
+    depth: int = Query(1, ge=1, le=10, description="Traversal depth (1-10)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all dependents of a symbol.
+    
+    Dependents include:
+    - Symbols that call this symbol
+    - Files that import this symbol's file
+    
+    Args:
+        repository_id: Repository UUID
+        symbol_id: Symbol UUID
+        depth: Traversal depth
+        db: Database session
+        
+    Returns:
+        Symbol dependents grouped by type
+        
+    Raises:
+        404: Symbol not found
+    """
+    # Verify symbol exists and belongs to repository
+    symbol = db.query(Symbol).filter(Symbol.id == symbol_id).first()
+    if not symbol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} not found"
+        )
+    
+    # Verify symbol belongs to this repository
+    analysis_run = db.query(AnalysisRun).filter(
+        AnalysisRun.id == symbol.analysis_run_id,
+        AnalysisRun.repository_id == repository_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get dependents using graph service
+    graph_service = GraphService(db)
+    dependents = graph_service.get_symbol_dependents(symbol_id, depth)
+    
+    # Convert to response schema
+    caller_edges = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependents["callers"]
+    ]
+    
+    imported_by_edges = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependents["imported_by"]
+    ]
+    
+    total = len(caller_edges) + len(imported_by_edges)
+    
+    return SymbolDependentsResponse(
+        symbol_id=str(symbol_id),
+        symbol_name=symbol.name,
+        depth=depth,
+        callers=caller_edges,
+        imported_by=imported_by_edges,
+        total_dependents=total
+    )
+
+
+@router.get("/{repository_id}/files/{file_id}/dependencies", response_model=FileDependenciesResponse)
+def get_file_dependencies(
+    repository_id: UUID,
+    file_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Get files that the specified file imports.
+    
+    Args:
+        repository_id: Repository UUID
+        file_id: File UUID
+        db: Database session
+        
+    Returns:
+        List of import relationships
+        
+    Raises:
+        404: File not found
+    """
+    # Verify file exists and belongs to repository
+    file = db.query(File).filter(File.id == file_id).first()
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File {file_id} not found"
+        )
+    
+    if file.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File {file_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get dependencies using graph service
+    graph_service = GraphService(db)
+    dependency_edges = graph_service.get_file_dependencies(file_id)
+    
+    # Convert to response schema
+    imports = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependency_edges
+    ]
+    
+    return FileDependenciesResponse(
+        file_id=str(file_id),
+        file_path=file.path,
+        imports=imports,
+        total_dependencies=len(imports)
+    )
+
+
+@router.get("/{repository_id}/files/{file_id}/dependents", response_model=FileDependentsResponse)
+def get_file_dependents(
+    repository_id: UUID,
+    file_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Get files that import the specified file.
+    
+    Args:
+        repository_id: Repository UUID
+        file_id: File UUID
+        db: Database session
+        
+    Returns:
+        List of import relationships
+        
+    Raises:
+        404: File not found
+    """
+    # Verify file exists and belongs to repository
+    file = db.query(File).filter(File.id == file_id).first()
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File {file_id} not found"
+        )
+    
+    if file.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File {file_id} does not belong to repository {repository_id}"
+        )
+    
+    # Get dependents using graph service
+    graph_service = GraphService(db)
+    dependent_edges = graph_service.get_file_dependents(file_id)
+    
+    # Convert to response schema
+    imported_by = [
+        GraphEdgeSchema(
+            type=edge.relationship_type,
+            source=edge.source.to_dict(),
+            target=edge.target.to_dict(),
+            line_number=edge.line_number
+        )
+        for edge in dependent_edges
+    ]
+    
+    return FileDependentsResponse(
+        file_id=str(file_id),
+        file_path=file.path,
+        imported_by=imported_by,
+        total_dependents=len(imported_by)
+    )
+
+
+@router.get("/{repository_id}/symbols/{symbol_id}/impact", response_model=ImpactAnalysisResponse)
+def analyze_symbol_impact(
+    repository_id: UUID,
+    symbol_id: UUID,
+    max_depth: int = Query(5, ge=1, le=10, description="Maximum traversal depth (1-10)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze the blast radius of changes to a symbol.
+    
+    This performs multi-level traversal to find all symbols that
+    transitively depend on the target symbol.
+    
+    Use this to understand the impact of modifying a function:
+    - What would break if this function's signature changed?
+    - Which parts of the codebase depend on this function?
+    - How far does the dependency chain extend?
+    
+    Args:
+        repository_id: Repository UUID
+        symbol_id: Symbol UUID
+        max_depth: Maximum traversal depth (default: 5, max: 10)
+        db: Database session
+        
+    Returns:
+        Impact analysis with direct and indirect dependents
+        
+    Raises:
+        404: Symbol not found
+    """
+    # Verify symbol exists and belongs to repository
+    symbol = db.query(Symbol).filter(Symbol.id == symbol_id).first()
+    if not symbol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} not found"
+        )
+    
+    # Verify symbol belongs to this repository
+    analysis_run = db.query(AnalysisRun).filter(
+        AnalysisRun.id == symbol.analysis_run_id,
+        AnalysisRun.repository_id == repository_id
+    ).first()
+    
+    if not analysis_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol {symbol_id} does not belong to repository {repository_id}"
+        )
+    
+    # Perform impact analysis
+    graph_service = GraphService(db)
+    impact = graph_service.analyze_symbol_impact(symbol_id, max_depth)
+    
+    return ImpactAnalysisResponse(
+        target=impact["target"],
+        direct_callers=impact["direct_callers"],
+        indirect_dependents=impact["indirect_dependents"],
+        total_dependents=impact["total_dependents"],
+        depth_map=impact["depth_map"],
+        max_depth=max_depth
+    )

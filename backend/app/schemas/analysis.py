@@ -208,3 +208,251 @@ class RepositoryAnalysisResponse(BaseModel):
     # Phase 4: Database Persistence IDs
     repository_id: Optional[str] = Field(None, description="UUID of persisted repository record")
     analysis_run_id: Optional[str] = Field(None, description="UUID of persisted analysis run")
+
+
+# ============================================================================
+# Phase 5: Graph Query Schemas
+# ============================================================================
+
+
+class GraphNode(BaseModel):
+    """
+    Represents a node in the dependency graph.
+    
+    Nodes can represent:
+    - Symbol (function, class, method)
+    - File
+    - External module
+    """
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "name": "create_order",
+                "type": "function",
+                "file": "app/services/order.py",
+                "language": "Python"
+            }
+        }
+    )
+    
+    id: str = Field(..., description="Node ID (UUID for internal nodes, 'external' for external dependencies)")
+    name: str = Field(..., description="Node name")
+    type: str = Field(..., description="Node type: function, class, method, file, external_module")
+    file: Optional[str] = Field(None, description="File path for symbols")
+    language: Optional[str] = Field(None, description="Programming language")
+
+
+class GraphEdge(BaseModel):
+    """
+    Represents an edge (relationship) in the dependency graph.
+    
+    Edges represent:
+    - calls: Function A calls Function B
+    - imports: File A imports File B
+    - contains: Class A contains Method B
+    """
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "type": "calls",
+                "source": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "process_order",
+                    "type": "function",
+                    "file": "app/controllers/order.py",
+                    "language": "Python"
+                },
+                "target": {
+                    "id": "223e4567-e89b-12d3-a456-426614174001",
+                    "name": "create_order",
+                    "type": "function",
+                    "file": "app/services/order.py",
+                    "language": "Python"
+                },
+                "line_number": 15
+            }
+        }
+    )
+    
+    type: str = Field(..., description="Relationship type: calls, imports, contains")
+    source: GraphNode = Field(..., description="Source node")
+    target: GraphNode = Field(..., description="Target node")
+    line_number: Optional[int] = Field(None, description="Line number where relationship occurs")
+
+
+class SymbolCallersResponse(BaseModel):
+    """Response schema for symbol callers query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol_id": "123e4567-e89b-12d3-a456-426614174000",
+                "symbol_name": "create_order",
+                "depth": 2,
+                "callers": [
+                    {
+                        "type": "calls",
+                        "source": {"id": "...", "name": "process_order", "type": "function"},
+                        "target": {"id": "...", "name": "create_order", "type": "function"}
+                    }
+                ],
+                "total_callers": 3
+            }
+        }
+    )
+    
+    symbol_id: str = Field(..., description="UUID of the target symbol")
+    symbol_name: str = Field(..., description="Name of the target symbol")
+    depth: int = Field(..., description="Traversal depth")
+    callers: List[GraphEdge] = Field(..., description="List of caller relationships")
+    total_callers: int = Field(..., description="Total number of unique callers")
+
+
+class SymbolCalleesResponse(BaseModel):
+    """Response schema for symbol callees query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol_id": "123e4567-e89b-12d3-a456-426614174000",
+                "symbol_name": "process_order",
+                "depth": 2,
+                "callees": [
+                    {
+                        "type": "calls",
+                        "source": {"id": "...", "name": "process_order", "type": "function"},
+                        "target": {"id": "...", "name": "create_order", "type": "function"}
+                    }
+                ],
+                "total_callees": 5
+            }
+        }
+    )
+    
+    symbol_id: str = Field(..., description="UUID of the source symbol")
+    symbol_name: str = Field(..., description="Name of the source symbol")
+    depth: int = Field(..., description="Traversal depth")
+    callees: List[GraphEdge] = Field(..., description="List of callee relationships")
+    total_callees: int = Field(..., description="Total number of unique callees")
+
+
+class SymbolDependenciesResponse(BaseModel):
+    """Response schema for symbol dependencies query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol_id": "123e4567-e89b-12d3-a456-426614174000",
+                "symbol_name": "OrderService",
+                "depth": 1,
+                "calls": [],
+                "imports": [],
+                "total_dependencies": 10
+            }
+        }
+    )
+    
+    symbol_id: str = Field(..., description="UUID of the symbol")
+    symbol_name: str = Field(..., description="Name of the symbol")
+    depth: int = Field(..., description="Traversal depth")
+    calls: List[GraphEdge] = Field(..., description="Functions/methods this symbol calls")
+    imports: List[GraphEdge] = Field(..., description="Modules this symbol's file imports")
+    total_dependencies: int = Field(..., description="Total dependencies")
+
+
+class SymbolDependentsResponse(BaseModel):
+    """Response schema for symbol dependents query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol_id": "123e4567-e89b-12d3-a456-426614174000",
+                "symbol_name": "create_order",
+                "depth": 2,
+                "callers": [],
+                "imported_by": [],
+                "total_dependents": 8
+            }
+        }
+    )
+    
+    symbol_id: str = Field(..., description="UUID of the symbol")
+    symbol_name: str = Field(..., description="Name of the symbol")
+    depth: int = Field(..., description="Traversal depth")
+    callers: List[GraphEdge] = Field(..., description="Symbols that call this symbol")
+    imported_by: List[GraphEdge] = Field(..., description="Files that import this symbol's file")
+    total_dependents: int = Field(..., description="Total dependents")
+
+
+class FileDependenciesResponse(BaseModel):
+    """Response schema for file dependencies query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "file_id": "123e4567-e89b-12d3-a456-426614174000",
+                "file_path": "app/services/order.py",
+                "imports": [],
+                "total_dependencies": 5
+            }
+        }
+    )
+    
+    file_id: str = Field(..., description="UUID of the file")
+    file_path: str = Field(..., description="File path")
+    imports: List[GraphEdge] = Field(..., description="Files/modules this file imports")
+    total_dependencies: int = Field(..., description="Total dependencies")
+
+
+class FileDependentsResponse(BaseModel):
+    """Response schema for file dependents query."""
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "file_id": "123e4567-e89b-12d3-a456-426614174000",
+                "file_path": "app/services/order.py",
+                "imported_by": [],
+                "total_dependents": 3
+            }
+        }
+    )
+    
+    file_id: str = Field(..., description="UUID of the file")
+    file_path: str = Field(..., description="File path")
+    imported_by: List[GraphEdge] = Field(..., description="Files that import this file")
+    total_dependents: int = Field(..., description="Total dependents")
+
+
+class ImpactAnalysisResponse(BaseModel):
+    """
+    Response schema for blast radius / impact analysis.
+    
+    Shows what would be affected by changes to a symbol.
+    """
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "target": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "create_order",
+                    "type": "function",
+                    "file": "app/services/order.py"
+                },
+                "direct_callers": [
+                    {"id": "...", "name": "process_order", "type": "function"}
+                ],
+                "indirect_dependents": [
+                    {"id": "...", "name": "OrderController", "type": "class"}
+                ],
+                "total_dependents": 5,
+                "depth_map": {
+                    "uuid1": 1,
+                    "uuid2": 2
+                },
+                "max_depth": 5
+            }
+        }
+    )
+    
+    target: GraphNode = Field(..., description="The target symbol being analyzed")
+    direct_callers: List[Dict] = Field(..., description="Symbols that directly call the target")
+    indirect_dependents: List[Dict] = Field(..., description="Symbols that transitively depend on the target")
+    total_dependents: int = Field(..., description="Total number of affected symbols")
+    depth_map: Dict[str, int] = Field(..., description="Map of symbol IDs to their distance from target")
+    max_depth: int = Field(..., description="Maximum traversal depth used")
