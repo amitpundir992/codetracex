@@ -458,7 +458,7 @@ class PersistenceService:
             analysis_run: AnalysisRun model instance
             error_message: Error message describing the failure
         """
-        analysis_run.status = AnalysisStatus.failed
+        analysis_run.status = AnalysisStatus.FAILED
         analysis_run.error_message = error_message
         analysis_run.completed_at = datetime.utcnow()
         

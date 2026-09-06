@@ -53,9 +53,11 @@ import enum
 from app.db.session import Base
 
 
-class AnalysisStatus(enum.Enum):
+class AnalysisStatus(str, enum.Enum):
     """
     Status of an analysis run.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
     
     pending - Analysis queued but not started
     running - Analysis currently in progress
@@ -68,9 +70,11 @@ class AnalysisStatus(enum.Enum):
     FAILED = "failed"
 
 
-class SymbolType(enum.Enum):
+class SymbolType(str, enum.Enum):
     """
     Type of code symbol.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
     
     Supports multiple languages with common abstractions:
     - function: Standalone function
@@ -85,9 +89,11 @@ class SymbolType(enum.Enum):
     INTERFACE = "interface"
 
 
-class RelationshipType(enum.Enum):
+class RelationshipType(str, enum.Enum):
     """
     Type of relationship between entities.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
     
     CONTAINS - Class contains method, file contains symbol
     IMPORTS - File imports module
