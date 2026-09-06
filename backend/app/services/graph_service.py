@@ -46,6 +46,7 @@ import logging
 
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
+from sqlalchemy.orm import joinedload
 
 from app.db.models import (
     Symbol, File, Import, Call, Relationship,
@@ -153,7 +154,9 @@ class GraphService:
         """
         depth = min(depth, self.MAX_DEPTH)
         
-        target_symbol = self.db.query(Symbol).filter(Symbol.id == symbol_id).first()
+        target_symbol = self.db.query(Symbol).options(
+            joinedload(Symbol.file)
+        ).filter(Symbol.id == symbol_id).first()
         if not target_symbol:
             return []
         
@@ -169,7 +172,9 @@ class GraphService:
         
         for call in calls:
             # Find the caller symbol
-            caller_symbols = self.db.query(Symbol).filter(
+            caller_symbols = self.db.query(Symbol).options(
+                joinedload(Symbol.file)
+            ).filter(
                 Symbol.name == call.caller_name,
                 Symbol.file_id == call.file_id
             ).all()
@@ -220,7 +225,9 @@ class GraphService:
         """
         depth = min(depth, self.MAX_DEPTH)
         
-        source_symbol = self.db.query(Symbol).filter(Symbol.id == symbol_id).first()
+        source_symbol = self.db.query(Symbol).options(
+            joinedload(Symbol.file)
+        ).filter(Symbol.id == symbol_id).first()
         if not source_symbol:
             return []
         
@@ -235,7 +242,9 @@ class GraphService:
         
         for call in calls:
             # Find the callee symbol
-            callee_symbols = self.db.query(Symbol).filter(
+            callee_symbols = self.db.query(Symbol).options(
+                joinedload(Symbol.file)
+            ).filter(
                 Symbol.name == call.callee_name,
                 Symbol.analysis_run_id == source_symbol.analysis_run_id
             ).all()
@@ -286,7 +295,9 @@ class GraphService:
         Returns:
             Dictionary with 'calls' and 'imports' keys containing edge lists
         """
-        symbol = self.db.query(Symbol).filter(Symbol.id == symbol_id).first()
+        symbol = self.db.query(Symbol).options(
+            joinedload(Symbol.file)
+        ).filter(Symbol.id == symbol_id).first()
         if not symbol:
             return {"calls": [], "imports": []}
         
@@ -320,7 +331,9 @@ class GraphService:
         Returns:
             Dictionary with 'callers' and 'imported_by' keys containing edge lists
         """
-        symbol = self.db.query(Symbol).filter(Symbol.id == symbol_id).first()
+        symbol = self.db.query(Symbol).options(
+            joinedload(Symbol.file)
+        ).filter(Symbol.id == symbol_id).first()
         if not symbol:
             return {"callers": [], "imported_by": []}
         
@@ -389,13 +402,16 @@ class GraphService:
         """
         max_depth = min(max_depth, self.MAX_DEPTH)
         
-        target_symbol = self.db.query(Symbol).filter(Symbol.id == symbol_id).first()
+        target_symbol = self.db.query(Symbol).options(
+            joinedload(Symbol.file)
+        ).filter(Symbol.id == symbol_id).first()
         if not target_symbol:
             return {
                 "target": None,
                 "direct_callers": [],
                 "indirect_dependents": [],
-                "depth_map": {}
+                "depth_map": {},
+                "total_dependents": 0
             }
         
         # Get all dependents with full traversal

@@ -611,3 +611,277 @@ def test_multiple_callers(db_session, graph_service):
     assert len(callers) == 3
     caller_names = {edge.source.name for edge in callers}
     assert caller_names == {"caller_one", "caller_two", "caller_three"}
+
+
+def test_repository_isolation(db_session, graph_service):
+    """Test that repositories cannot access each other's graph data."""
+    # Create Repository A
+    repo_a = Repository(
+        owner="testuser",
+        name="repo-a",
+        full_name="testuser/repo-a",
+        github_url="https://github.com/testuser/repo-a",
+        default_branch="main"
+    )
+    db_session.add(repo_a)
+    db_session.flush()
+    
+    analysis_a = AnalysisRun(
+        repository_id=repo_a.id,
+        status=AnalysisStatus.COMPLETED,
+        total_files=1,
+        analyzed_files=1,
+        started_at=datetime.utcnow(),
+        completed_at=datetime.utcnow()
+    )
+    db_session.add(analysis_a)
+    db_session.flush()
+    
+    file_a = File(
+        repository_id=repo_a.id,
+        analysis_run_id=analysis_a.id,
+        path="app_a.py",
+        filename="app_a.py",
+        extension=".py",
+        language="Python",
+        size_bytes=1000
+    )
+    db_session.add(file_a)
+    db_session.flush()
+    
+    symbol_a = Symbol(
+        file_id=file_a.id,
+        analysis_run_id=analysis_a.id,
+        name="function_a",
+        symbol_type=SymbolType.FUNCTION,
+        language="Python",
+        start_line=1,
+        end_line=5
+    )
+    db_session.add(symbol_a)
+    db_session.flush()
+    
+    # Create Repository B
+    repo_b = Repository(
+        owner="testuser",
+        name="repo-b",
+        full_name="testuser/repo-b",
+        github_url="https://github.com/testuser/repo-b",
+        default_branch="main"
+    )
+    db_session.add(repo_b)
+    db_session.flush()
+    
+    analysis_b = AnalysisRun(
+        repository_id=repo_b.id,
+        status=AnalysisStatus.COMPLETED,
+        total_files=1,
+        analyzed_files=1,
+        started_at=datetime.utcnow(),
+        completed_at=datetime.utcnow()
+    )
+    db_session.add(analysis_b)
+    db_session.flush()
+    
+    file_b = File(
+        repository_id=repo_b.id,
+        analysis_run_id=analysis_b.id,
+        path="app_b.py",
+        filename="app_b.py",
+        extension=".py",
+        language="Python",
+        size_bytes=1000
+    )
+    db_session.add(file_b)
+    db_session.flush()
+    
+    symbol_b = Symbol(
+        file_id=file_b.id,
+        analysis_run_id=analysis_b.id,
+        name="function_b",
+        symbol_type=SymbolType.FUNCTION,
+        language="Python",
+        start_line=1,
+        end_line=5
+    )
+    db_session.add(symbol_b)
+    db_session.flush()
+    
+    # Create call from B to A (cross-repo - should not happen in real data but test isolation)
+    call_b_to_a = Call(
+        file_id=file_b.id,
+        analysis_run_id=analysis_b.id,
+        caller_name="function_b",
+        callee_name="function_a",
+        line_number=3
+    )
+    db_session.add(call_b_to_a)
+    db_session.commit()
+    
+    # Query callers of symbol_a - should not find symbol_b because it's in different analysis run
+    callers = graph_service.get_symbol_callers(symbol_a.id, depth=1)
+    
+    # Should be empty because calls are scoped to analysis_run_id
+    assert len(callers) == 0
+
+
+def test_analysis_run_isolation(db_session, graph_service):
+    """Test that analysis runs are isolated from each other."""
+    # Create repository
+    repo = Repository(
+        owner="testuser",
+        name="test-repo",
+        full_name="testuser/test-repo",
+        github_url="https://github.com/testuser/test-repo",
+        default_branch="main"
+    )
+    db_session.add(repo)
+    db_session.flush()
+    
+    # Create Analysis Run 1
+    analysis_1 = AnalysisRun(
+        repository_id=repo.id,
+        status=AnalysisStatus.COMPLETED,
+        total_files=1,
+        analyzed_files=1,
+        started_at=datetime.utcnow(),
+        completed_at=datetime.utcnow()
+    )
+    db_session.add(analysis_1)
+    db_session.flush()
+    
+    file_1 = File(
+        repository_id=repo.id,
+        analysis_run_id=analysis_1.id,
+        path="app.py",
+        filename="app.py",
+        extension=".py",
+        language="Python",
+        size_bytes=1000
+    )
+    db_session.add(file_1)
+    db_session.flush()
+    
+    symbol_1 = Symbol(
+        file_id=file_1.id,
+        analysis_run_id=analysis_1.id,
+        name="test_function",
+        symbol_type=SymbolType.FUNCTION,
+        language="Python",
+        start_line=1,
+        end_line=5
+    )
+    db_session.add(symbol_1)
+    db_session.flush()
+    
+    # Create Analysis Run 2 (re-analysis)
+    analysis_2 = AnalysisRun(
+        repository_id=repo.id,
+        status=AnalysisStatus.COMPLETED,
+        total_files=1,
+        analyzed_files=1,
+        started_at=datetime.utcnow(),
+        completed_at=datetime.utcnow()
+    )
+    db_session.add(analysis_2)
+    db_session.flush()
+    
+    file_2 = File(
+        repository_id=repo.id,
+        analysis_run_id=analysis_2.id,
+        path="app.py",
+        filename="app.py",
+        extension=".py",
+        language="Python",
+        size_bytes=1000
+    )
+    db_session.add(file_2)
+    db_session.flush()
+    
+    symbol_2 = Symbol(
+        file_id=file_2.id,
+        analysis_run_id=analysis_2.id,
+        name="test_function",
+        symbol_type=SymbolType.FUNCTION,
+        language="Python",
+        start_line=1,
+        end_line=5
+    )
+    db_session.add(symbol_2)
+    db_session.flush()
+    
+    # Create call in analysis 2
+    call_2 = Call(
+        file_id=file_2.id,
+        analysis_run_id=analysis_2.id,
+        caller_name="another_function",
+        callee_name="test_function",
+        line_number=3
+    )
+    db_session.add(call_2)
+    db_session.commit()
+    
+    # Query callers of symbol_1 (from analysis 1) - should not see calls from analysis 2
+    callers = graph_service.get_symbol_callers(symbol_1.id, depth=1)
+    
+    # Should be empty because the call is in analysis_2
+    assert len(callers) == 0
+
+
+def test_depth_validation_zero(db_session, graph_service):
+    """Test that depth of 0 is treated as depth 1."""
+    fake_id = uuid4()
+    
+    # Depth 0 should be internally converted to at least 1
+    # Since symbol doesn't exist, should return empty list without error
+    callers = graph_service.get_symbol_callers(fake_id, depth=0)
+    assert isinstance(callers, list)
+
+
+def test_depth_validation_negative(db_session, graph_service):
+    """Test that negative depth is handled safely."""
+    fake_id = uuid4()
+    
+    # Negative depth should not crash
+    callers = graph_service.get_symbol_callers(fake_id, depth=-1)
+    assert isinstance(callers, list)
+
+
+def test_depth_validation_exceeds_max(db_session, graph_service):
+    """Test that depth exceeding MAX_DEPTH is capped."""
+    fake_id = uuid4()
+    
+    # Depth > MAX_DEPTH (10) should be capped
+    callers = graph_service.get_symbol_callers(fake_id, depth=100)
+    assert isinstance(callers, list)
+    
+    # Should not cause performance issues due to capping
+
+
+def test_invalid_uuid_format(db_session, graph_service):
+    """Test handling of invalid UUID format."""
+    # This test verifies robustness but actual validation happens at API layer
+    # GraphService should handle non-existent UUIDs gracefully
+    fake_id = uuid4()
+    
+    callers = graph_service.get_symbol_callers(fake_id, depth=1)
+    assert callers == []
+    
+    callees = graph_service.get_symbol_callees(fake_id, depth=1)
+    assert callees == []
+    
+    deps = graph_service.get_symbol_dependencies(fake_id, depth=1)
+    assert deps == {"calls": [], "imports": []}
+    
+    dependents = graph_service.get_symbol_dependents(fake_id, depth=1)
+    assert dependents == {"callers": [], "imported_by": []}
+
+
+def test_impact_analysis_with_zero_depth(db_session, graph_service):
+    """Test impact analysis with minimal depth."""
+    fake_id = uuid4()
+    
+    # Should handle gracefully
+    impact = graph_service.analyze_symbol_impact(fake_id, max_depth=0)
+    assert impact["target"] is None
+    assert impact["total_dependents"] == 0

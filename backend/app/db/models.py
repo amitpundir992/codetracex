@@ -207,7 +207,7 @@ class AnalysisRun(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
-    status = Column(Enum(AnalysisStatus), default=AnalysisStatus.PENDING, nullable=False)
+    status = Column(Enum(AnalysisStatus, values_callable=lambda x: [e.value for e in x]), default=AnalysisStatus.PENDING, nullable=False)
     total_files = Column(Integer, default=0)
     analyzed_files = Column(Integer, default=0)
     total_symbols = Column(Integer, default=0)
@@ -344,7 +344,7 @@ class Symbol(Base):
     file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
     analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
-    symbol_type = Column(Enum(SymbolType), nullable=False)
+    symbol_type = Column(Enum(SymbolType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     language = Column(String(100), nullable=False)
     start_line = Column(Integer, nullable=False)
     end_line = Column(Integer, nullable=False)
@@ -520,7 +520,7 @@ class Relationship(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False)
-    relationship_type = Column(Enum(RelationshipType), nullable=False)
+    relationship_type = Column(Enum(RelationshipType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     source_type = Column(String(50), nullable=False)  # "symbol", "file"
     source_id = Column(UUID(as_uuid=True), nullable=False)  # UUID of source entity
     target_type = Column(String(50), nullable=False)  # "symbol", "file", "module"
