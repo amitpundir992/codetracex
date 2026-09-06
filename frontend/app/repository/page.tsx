@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { analyzeRepository, APIError } from '@/lib/api';
-import { RepositoryAnalysisResponse } from '@/types/repository';
+import { RepositoryAnalysisResponse, Symbol } from '@/types/repository';
 import { Loader2, AlertCircle, GitBranch, FileCode, HardDrive } from 'lucide-react';
+import DependencyExplorer from '@/components/DependencyExplorer';
 
 export default function RepositoryPage() {
   const [url, setUrl] = useState('');
@@ -14,6 +15,7 @@ export default function RepositoryPage() {
   const [loadingStage, setLoadingStage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RepositoryAnalysisResponse | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<Symbol | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,7 +318,7 @@ export default function RepositoryPage() {
                   <CardHeader>
                     <CardTitle>Extracted Symbols</CardTitle>
                     <CardDescription>
-                      Functions, classes, and methods found in the codebase (showing up to 50)
+                      Functions, classes, and methods found in the codebase (click to explore dependencies)
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -324,7 +326,12 @@ export default function RepositoryPage() {
                       {analysis.symbols.map((symbol, index) => (
                         <div
                           key={index}
-                          className="p-3 bg-slate-50 dark:bg-slate-900 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          onClick={() => setSelectedSymbol(symbol)}
+                          className={`p-3 rounded cursor-pointer transition-colors ${
+                            selectedSymbol?.name === symbol.name && selectedSymbol?.file === symbol.file
+                              ? 'bg-primary/20 border-2 border-primary'
+                              : 'bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -352,8 +359,31 @@ export default function RepositoryPage() {
                         </div>
                       ))}
                     </div>
+                    {selectedSymbol && (
+                      <div className="mt-4 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Selected: <span className="font-mono font-semibold">{selectedSymbol.name}</span>
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedSymbol(null)}
+                        >
+                          Clear Selection
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Phase 5: Dependency Explorer */}
+              {selectedSymbol && analysis.repository_id && (
+                <DependencyExplorer
+                  repositoryId={analysis.repository_id}
+                  symbolId={selectedSymbol.name} // Note: Using name as ID for now since Symbol schema doesn't have id yet
+                  symbolName={selectedSymbol.name}
+                />
               )}
 
               {/* Files List */}

@@ -92,3 +92,77 @@ export interface RepositoryAnalysisResponse {
   repository_id?: string;
   analysis_run_id?: string;
 }
+
+// Phase 5: Graph Query Types
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  file?: string;
+  language?: string;
+}
+
+export interface GraphEdge {
+  type: string;
+  source: GraphNode;
+  target: GraphNode;
+  line_number?: number;
+}
+
+export interface SymbolCallersResponse {
+  symbol_id: string;
+  symbol_name: string;
+  depth: number;
+  callers: GraphEdge[];
+  total_callers: number;
+}
+
+export interface SymbolCalleesResponse {
+  symbol_id: string;
+  symbol_name: string;
+  depth: number;
+  callees: GraphEdge[];
+  total_callees: number;
+}
+
+export interface SymbolDependenciesResponse {
+  symbol_id: string;
+  symbol_name: string;
+  depth: number;
+  calls: GraphEdge[];
+  imports: GraphEdge[];
+  total_dependencies: number;
+}
+
+export interface SymbolDependentsResponse {
+  symbol_id: string;
+  symbol_name: string;
+  depth: number;
+  callers: GraphEdge[];
+  imported_by: GraphEdge[];
+  total_dependents: number;
+}
+
+export interface FileDependenciesResponse {
+  file_id: string;
+  file_path: string;
+  imports: GraphEdge[];
+  total_dependencies: number;
+}
+
+export interface FileDependentsResponse {
+  file_id: string;
+  file_path: string;
+  imported_by: GraphEdge[];
+  total_dependents: number;
+}
+
+export interface ImpactAnalysisResponse {
+  target: GraphNode;
+  direct_callers: GraphNode[];
+  indirect_dependents: GraphNode[];
+  total_dependents: number;
+  depth_map: Record<string, number>;
+  max_depth: number;
+}
