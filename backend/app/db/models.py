@@ -104,6 +104,23 @@ class RelationshipType(str, enum.Enum):
     CALLS = "calls"
 
 
+class ChangeType(str, enum.Enum):
+    """
+    Type of Git file change.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    
+    ADDED - File was added
+    MODIFIED - File was modified
+    DELETED - File was deleted
+    RENAMED - File was renamed
+    """
+    ADDED = "added"
+    MODIFIED = "modified"
+    DELETED = "deleted"
+    RENAMED = "renamed"
+
+
 class Repository(Base):
     """
     Represents a GitHub repository.
@@ -540,3 +557,151 @@ class Relationship(Base):
     
     def __repr__(self):
         return f"<Relationship {self.source_type}:{self.source_id} {self.relationship_type.value} {self.target_type}:{self.target_id or self.target_name}>"
+
+
+class Commit(Base):
+    """
+    Represents a Git commit in repository history.
+    
+    Phase 6: Git History Intelligence
+    
+    Git commits are fundamental to understanding repository evolution:
+    - Who made changes?
+    - When were changes made?
+    - What was the intent (commit message)?
+    - What files were changed?
+    
+    Architecture:
+        Commits belong to repositories, not analysis runs.
+        Git history is a permanent property of the repository.
+        
+        Repository → Commits (one-to-many)
+        Commit → CommitFileChanges (one-to-many)
+    
+    Duplicate Handling:
+        Commits are unique by (repository_id, commit_hash).
+        Re-analyzing a repository does not duplicate commits.
+    
+    Parent Commits:
+        Stored as comma-separated SHA list for simplicity.
+        Most commits have 1 parent, merge commits have 2+.
+    
+    Fields:
+        id: Internal UUID primary key
+        repository_id: Repository this commit belongs to
+        commit_hash: Full Git SHA-1 hash (40 characters)
+        author_name: Commit author name
+        author_email: Commit author email
+        commit_message: Full commit message
+        committed_at: Timestamp when commit was made
+        parent_hashes: Comma-separated parent commit SHAs
+        created_at: When this record was created
+    
+    Relationships:
+        repository: Parent repository
+        file_changes: Files changed in this commit
+    """
+    __tablename__ = "commits"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
+    commit_hash = Column(String(40), nullable=False)
+    author_name = Column(String(255), nullable=False)
+    author_email = Column(String(255), nullable=False)
+    commit_message = Column(Text, nullable=False)
+    committed_at = Column(DateTime, nullable=False)
+    parent_hashes = Column(Text)  # Comma-separated parent SHAs
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    repository = relationship("Repository", backref="commits")
+    file_changes = relationship("CommitFileChange", back_populates="commit", cascade="all, delete-orphan")
+    
+    # Indexes and Constraints
+    __table_args__ = (
+        Index("idx_commits_repository_id", "repository_id"),
+        Index("idx_commits_commit_hash", "commit_hash"),
+        Index("idx_commits_committed_at", "committed_at"),
+        Index("idx_commits_author_email", "author_email"),
+        # Commit hash must be unique within a repository
+        UniqueConstraint("repository_id", "commit_hash", name="uq_commits_repository_hash"),
+    )
+    
+    def __repr__(self):
+        return f"<Commit {self.commit_hash[:8]} by {self.author_name}>"
+
+
+class CommitFileChange(Base):
+    """
+    Represents a file change in a Git commit.
+    
+    Phase 6: Git History Intelligence
+    
+    Each commit can change multiple files. This table tracks:
+    - Which files were changed
+    - How they were changed (added/modified/deleted/renamed)
+    - How much they changed (additions/deletions)
+    
+    Architecture:
+        CommitFileChange links commits to files where possible.
+        
+        Commit → CommitFileChange → File (nullable)
+        
+        file_id is NULLABLE because:
+        - Historical files may not exist in current analysis
+        - Files may have been deleted
+        - Files may have been renamed (old path no longer exists)
+    
+    Change Types:
+        ADDED - File was newly created
+        MODIFIED - File content was changed
+        DELETED - File was removed
+        RENAMED - File was moved/renamed
+    
+    Rename Handling:
+        For renames, both old_path and new_path are populated.
+        file_id links to the current File if it exists.
+        Historical path information is preserved.
+    
+    Fields:
+        id: Internal UUID primary key
+        commit_id: Commit that made this change
+        file_id: Current File record (nullable)
+        path: File path (current path or new_path for renames)
+        change_type: Type of change (added/modified/deleted/renamed)
+        additions: Number of lines added
+        deletions: Number of lines deleted
+        old_path: Original path (for renames)
+        new_path: New path (for renames)
+        created_at: When this record was created
+    
+    Relationships:
+        commit: Parent commit
+        file: Current file (if exists)
+    """
+    __tablename__ = "commit_file_changes"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    commit_id = Column(UUID(as_uuid=True), ForeignKey("commits.id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
+    path = Column(String(1024), nullable=False)
+    change_type = Column(Enum(ChangeType, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    additions = Column(Integer, default=0)
+    deletions = Column(Integer, default=0)
+    old_path = Column(String(1024))
+    new_path = Column(String(1024))
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    commit = relationship("Commit", back_populates="file_changes")
+    file = relationship("File", backref="historical_changes")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_commit_file_changes_commit_id", "commit_id"),
+        Index("idx_commit_file_changes_file_id", "file_id"),
+        Index("idx_commit_file_changes_path", "path"),
+    )
+    
+    def __repr__(self):
+        return f"<CommitFileChange {self.change_type.value} {self.path}>"
