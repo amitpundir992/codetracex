@@ -20,6 +20,54 @@ client = TestClient(app)
 @pytest.fixture
 def mock_analysis_result():
     """Create a mock analysis result."""
+    from app.services.static_analyzer import (
+        StaticAnalysisResult,
+        AnalysisSummary,
+        Symbol,
+        Import,
+        Call
+    )
+    
+    # Create mock static analysis result
+    static_analysis = StaticAnalysisResult(
+        summary=AnalysisSummary(
+            total_files=2,
+            analyzed_files=2,
+            skipped_files=0,
+            failed_files=0,
+            total_symbols=3,
+            symbols_by_type={"function": 3},
+            total_imports=1,
+            total_calls=1
+        ),
+        all_symbols=[
+            Symbol(
+                file_path="src/index.js",
+                name="App",
+                symbol_type="function",
+                language="JavaScript",
+                start_line=1,
+                end_line=10
+            )
+        ],
+        all_imports=[
+            Import(
+                file_path="src/index.js",
+                source="react",
+                imported_names=["useState"],
+                line_number=1
+            )
+        ],
+        all_calls=[
+            Call(
+                file_path="src/index.js",
+                caller_name="App",
+                callee_name="useState",
+                line_number=5
+            )
+        ]
+    )
+    
     return {
         "repository": "facebook/react",
         "metadata": {
@@ -60,7 +108,8 @@ def mock_analysis_result():
                 ),
             ],
             languages={"JavaScript": 80, "TypeScript": 70}
-        )
+        ),
+        "static_analysis": static_analysis
     }
 
 
@@ -92,6 +141,11 @@ class TestAnalyzeRepositoryEndpoint:
     @patch('app.services.analysis_service.RepositoryAnalysisService.analyze_repository')
     def test_analyze_repository_with_many_files(self, mock_analyze):
         """Test that API limits returned files even when many are scanned."""
+        from app.services.static_analyzer import (
+            StaticAnalysisResult,
+            AnalysisSummary
+        )
+        
         # Create result with 200 files
         many_files = [
             FileMetadata(
@@ -114,6 +168,21 @@ class TestAnalyzeRepositoryEndpoint:
                 total_size_bytes=20000,
                 files=many_files,
                 languages={"Python": 200}
+            ),
+            "static_analysis": StaticAnalysisResult(
+                summary=AnalysisSummary(
+                    total_files=200,
+                    analyzed_files=200,
+                    skipped_files=0,
+                    failed_files=0,
+                    total_symbols=0,
+                    symbols_by_type={},
+                    total_imports=0,
+                    total_calls=0
+                ),
+                all_symbols=[],
+                all_imports=[],
+                all_calls=[]
             )
         }
         

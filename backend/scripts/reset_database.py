@@ -21,11 +21,13 @@ from app.db.session import engine
 def reset_database():
     """Drop all tables, enums, and alembic version."""
     with engine.connect() as conn:
-        print("🗑️  Dropping all tables and types...")
+        print("Dropping all tables and types...")
         
         # Drop all tables
         drop_tables = """
-        DROP TABLE IF EXISTS function_calls CASCADE;
+        DROP TABLE IF EXISTS commit_file_changes CASCADE;
+        DROP TABLE IF EXISTS commits CASCADE;
+        DROP TABLE IF EXISTS calls CASCADE;
         DROP TABLE IF EXISTS imports CASCADE;
         DROP TABLE IF EXISTS symbols CASCADE;
         DROP TABLE IF EXISTS relationships CASCADE;
@@ -37,6 +39,7 @@ def reset_database():
         
         # Drop all enum types
         drop_types = """
+        DROP TYPE IF EXISTS changetype CASCADE;
         DROP TYPE IF EXISTS analysisstatus CASCADE;
         DROP TYPE IF EXISTS symboltype CASCADE;
         DROP TYPE IF EXISTS relationshiptype CASCADE;
@@ -46,18 +49,18 @@ def reset_database():
             conn.execute(text(drop_tables))
             conn.execute(text(drop_types))
             conn.commit()
-            print("✅ Database reset complete!")
+            print("Database reset complete!")
             print("\nNext steps:")
             print("1. Run: alembic upgrade head")
             print("2. This will create all tables fresh")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
             conn.rollback()
             raise
 
 
 if __name__ == "__main__":
-    confirm = input("⚠️  This will DELETE ALL DATA in the database. Continue? (yes/no): ")
+    confirm = input("WARNING: This will DELETE ALL DATA in the database. Continue? (yes/no): ")
     if confirm.lower() == "yes":
         reset_database()
     else:

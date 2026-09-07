@@ -447,6 +447,131 @@ class PersistenceService:
             'arrow_function': SymbolType.ARROW_FUNCTION,
             'interface': SymbolType.INTERFACE
         }
+        return mapping.get(type_str, SymbolType.FUNCTION)
+    
+    def persist_git_history(
+        self,
+        repository: Repository,
+        commits: List[Dict],
+        file_path_to_id: Optional[Dict[str, str]] = None
+    ) -> int:
+        """
+        Persist Git commit history to database.
+        
+        Phase 6: Git History Intelligence
+        
+        This method:
+        1. Checks for existing commits (by repository_id + commit_hash)
+        2. Inserts new commits
+        3. Inserts file changes for each commit
+        4. Links file changes to existing File records where possible
+        
+        Duplicate Handling:
+            Commits are unique by (repository_id, commit_hash).
+            If a commit already exists, it is skipped.
+            This allows re-analysis without duplicating history.
+        
+        File Matching:
+            If file_path_to_id is provided, file changes are linked to File records.
+            file_path_to_id maps: file_path -> file_id (UUID)
+            
+            For historical files not in current analysis:
+            - file_id is NULL
+            - path is preserved
+        
+        Args:
+            repository: Repository model instance
+            commits: List of commit dictionaries from GitHistoryService:
+                - commit_hash: Full SHA
+                - author_name: Author name
+                - author_email: Author email
+                - commit_message: Full message
+                - committed_at: datetime
+                - parent_hashes: List of parent SHAs
+                - file_changes: List of file change dicts
+            file_path_to_id: Optional mapping from file path to UUID
+            
+        Returns:
+            Number of commits persisted (new commits only)
+            
+        Raises:
+            Exception: If persistence fails
+        """
+        from app.db.models import Commit, CommitFileChange, ChangeType
+        
+        if not commits:
+            logger.info("No commits to persist")
+            return 0
+        
+        # Get existing commit hashes for this repository
+        existing_hashes = set(
+            row[0] for row in self.db.query(Commit.commit_hash)
+            .filter(Commit.repository_id == repository.id)
+            .all()
+        )
+        
+        new_commits = 0
+        
+        for commit_data in commits:
+            commit_hash = commit_data['commit_hash']
+            
+            # Skip if commit already exists
+            if commit_hash in existing_hashes:
+                logger.debug(f"Skipping existing commit: {commit_hash[:8]}")
+                continue
+            
+            # Create Commit record
+            commit = Commit(
+                repository_id=repository.id,
+                commit_hash=commit_hash,
+                author_name=commit_data['author_name'],
+                author_email=commit_data['author_email'],
+                commit_message=commit_data['commit_message'],
+                committed_at=commit_data['committed_at'],
+                parent_hashes=','.join(commit_data.get('parent_hashes', []))
+            )
+            
+            self.db.add(commit)
+            self.db.flush()  # Get commit.id for file changes
+            
+            # Create CommitFileChange records
+            file_changes = commit_data.get('file_changes', [])
+            for change_data in file_changes:
+                path = change_data['path']
+                
+                # Map change_type string to enum
+                change_type_str = change_data['change_type']
+                change_type = ChangeType[change_type_str.upper()]
+                
+                # Link to File record if available
+                file_id = None
+                if file_path_to_id and path in file_path_to_id:
+                    file_id = file_path_to_id[path]
+                
+                file_change = CommitFileChange(
+                    commit_id=commit.id,
+                    file_id=file_id,
+                    path=path,
+                    change_type=change_type,
+                    additions=change_data.get('additions', 0),
+                    deletions=change_data.get('deletions', 0),
+                    old_path=change_data.get('old_path'),
+                    new_path=change_data.get('new_path')
+                )
+                
+                self.db.add(file_change)
+            
+            new_commits += 1
+        
+        # Commit transaction
+        self.db.commit()
+        
+        logger.info(
+            f"Persisted {new_commits} new commits out of {len(commits)} total "
+            f"({len(commits) - new_commits} already existed)"
+        )
+        
+        return new_commits
         
         return mapping.get(type_str, SymbolType.FUNCTION)
     
