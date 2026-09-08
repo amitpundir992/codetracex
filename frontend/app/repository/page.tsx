@@ -8,6 +8,7 @@ import { analyzeRepository, APIError } from '@/lib/api';
 import { RepositoryAnalysisResponse, Symbol } from '@/types/repository';
 import { Loader2, AlertCircle, GitBranch, FileCode, HardDrive } from 'lucide-react';
 import DependencyExplorer from '@/components/DependencyExplorer';
+import GitHistory from '@/components/GitHistory';
 
 export default function RepositoryPage() {
   const [url, setUrl] = useState('');
@@ -384,6 +385,11 @@ export default function RepositoryPage() {
                   symbolId={selectedSymbol.name} // Note: Using name as ID for now since Symbol schema doesn't have id yet
                   symbolName={selectedSymbol.name}
                 />
+              )}
+
+              {/* Phase 6: Git History */}
+              {analysis.repository_id && (
+                <GitHistory repositoryId={analysis.repository_id} />
               )}
 
               {/* Files List */}
