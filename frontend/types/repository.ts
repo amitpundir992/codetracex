@@ -166,3 +166,93 @@ export interface ImpactAnalysisResponse {
   depth_map: Record<string, number>;
   max_depth: number;
 }
+
+// Phase 6: Git History Types
+
+export interface Commit {
+  id: string;
+  repository_id: string;
+  commit_hash: string;
+  author_name: string;
+  author_email: string;
+  commit_message: string;
+  committed_at: string;
+  parent_hashes: string[];
+  created_at: string;
+}
+
+export interface CommitFileChange {
+  id: string;
+  commit_id: string;
+  file_id: string | null;
+  path: string;
+  change_type: 'added' | 'modified' | 'deleted' | 'renamed';
+  additions: number;
+  deletions: number;
+  old_path: string | null;
+  new_path: string | null;
+  created_at: string;
+}
+
+export interface CommitSummary {
+  id: string;
+  commit_hash: string;
+  commit_message: string;
+  author_name: string;
+  author_email: string;
+  committed_at: string;
+  file_change_count: number;
+}
+
+export interface CommitDetail {
+  id: string;
+  commit_hash: string;
+  commit_message: string;
+  author_name: string;
+  author_email: string;
+  committed_at: string;
+  parent_hashes: string[];
+  changes: CommitFileChange[];
+}
+
+export interface PaginatedCommitResponse {
+  commits: CommitSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface FileHistoryEntry {
+  commit_id: string;
+  commit_hash: string;
+  commit_message: string;
+  author_name: string;
+  author_email: string;
+  committed_at: string;
+  change_type: 'added' | 'modified' | 'deleted' | 'renamed';
+  additions: number;
+  deletions: number;
+  old_path: string | null;
+  new_path: string | null;
+}
+
+export interface FileHistoryResponse {
+  file_id: string;
+  file_path: string;
+  history: FileHistoryEntry[];
+  total_commits: number;
+}
+
+export interface CoChangeFile {
+  file_id: string;
+  file_path: string;
+  shared_commits: number;
+}
+
+export interface CoChangeResponse {
+  file_id: string;
+  file_path: string;
+  co_changes: CoChangeFile[];
+  total_co_changes: number;
+}
