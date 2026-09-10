@@ -121,6 +121,21 @@ class ChangeType(str, enum.Enum):
     RENAMED = "renamed"
 
 
+class HttpMethod(str, enum.Enum):
+    """
+    HTTP methods for API endpoints.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    """
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+    PATCH = "PATCH"
+    DELETE = "DELETE"
+    OPTIONS = "OPTIONS"
+    HEAD = "HEAD"
+
+
 class Repository(Base):
     """
     Represents a GitHub repository.
@@ -705,3 +720,94 @@ class CommitFileChange(Base):
     
     def __repr__(self):
         return f"<CommitFileChange {self.change_type.value} {self.path}>"
+
+
+class ApiEndpoint(Base):
+    """
+    Represents an API endpoint in the repository.
+    
+    Phase 7: API & Application Structure Intelligence
+    
+    API endpoints are discovered through static analysis of web framework code:
+    - FastAPI: @app.get, @app.post, etc.
+    - Flask: @app.route, @blueprint.route
+    - Express: router.get, router.post, app.get, app.post
+    - Next.js: App Router route handlers (export GET, POST, etc.)
+    
+    Architecture:
+        Endpoints belong to repositories and analysis runs.
+        Endpoints reference files and optionally resolve to handler symbols.
+        
+        Repository → AnalysisRun → ApiEndpoint → File
+                                              ↓
+                                            Symbol (nullable)
+    
+    Handler Resolution:
+        When possible, endpoints link to existing Symbol records.
+        If handler cannot be resolved confidently, symbol_id remains NULL.
+        This maintains conservative factual reporting.
+    
+    Path Representation:
+        Paths are stored as declared in the framework:
+        - FastAPI: /users/{id}
+        - Flask: /users/<id>
+        - Express: /users/:id
+        
+        Original framework syntax is preserved for accuracy.
+    
+    Fields:
+        id: Internal UUID primary key
+        repository_id: Repository containing this endpoint
+        analysis_run_id: Analysis run that discovered this endpoint
+        file_id: File containing the endpoint definition
+        symbol_id: Handler symbol (NULL if not resolved)
+        method: HTTP method (GET, POST, PUT, PATCH, DELETE, etc.)
+        path: Endpoint path as declared in code
+        framework: Web framework (fastapi, flask, express, nextjs)
+        handler_name: Name of handler function (for reference)
+        start_line: Starting line of endpoint definition
+        end_line: Ending line of endpoint definition
+        created_at: When this record was created
+    
+    Relationships:
+        repository: Parent repository
+        analysis_run: Analysis run that discovered this endpoint
+        file: File containing endpoint definition
+        symbol: Handler symbol (if resolved)
+    """
+    __tablename__ = "api_endpoints"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
+    analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    symbol_id = Column(UUID(as_uuid=True), ForeignKey("symbols.id", ondelete="SET NULL"))
+    method = Column(Enum(HttpMethod, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    path = Column(String(1024), nullable=False)
+    framework = Column(String(50), nullable=False)
+    handler_name = Column(String(255))
+    start_line = Column(Integer)
+    end_line = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    repository = relationship("Repository", backref="api_endpoints")
+    analysis_run = relationship("AnalysisRun", backref="api_endpoints")
+    file = relationship("File", backref="api_endpoints")
+    symbol = relationship("Symbol", backref="api_endpoints")
+    
+    # Indexes and Constraints
+    __table_args__ = (
+        Index("idx_api_endpoints_repository_id", "repository_id"),
+        Index("idx_api_endpoints_analysis_run_id", "analysis_run_id"),
+        Index("idx_api_endpoints_file_id", "file_id"),
+        Index("idx_api_endpoints_symbol_id", "symbol_id"),
+        Index("idx_api_endpoints_method", "method"),
+        Index("idx_api_endpoints_framework", "framework"),
+        Index("idx_api_endpoints_path", "path"),
+        # Endpoint should be unique within an analysis run
+        UniqueConstraint("analysis_run_id", "method", "path", name="uq_api_endpoints_analysis_run_method_path"),
+    )
+    
+    def __repr__(self):
+        return f"<ApiEndpoint {self.method.value} {self.path}>"
