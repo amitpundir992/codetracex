@@ -164,7 +164,8 @@ class PersistenceService:
         repository: Repository,
         analysis_run: AnalysisRun,
         static_analysis: StaticAnalysisResult,
-        file_metadata: List[Dict]
+        file_metadata: List[Dict],
+        api_endpoints: Optional[List] = None  # Optional list of DetectedEndpoint
     ) -> None:
         """
         Persist complete analysis result to database.
@@ -175,12 +176,14 @@ class PersistenceService:
         - Imports
         - Calls
         - Relationships
+        - API Endpoints (Phase 7)
         
         Args:
             repository: Repository model instance
             analysis_run: AnalysisRun model instance
             static_analysis: Static analysis result from Phase 3
             file_metadata: List of file metadata dicts from file scanner
+            api_endpoints: Optional list of DetectedEndpoint from Phase 7
         """
         try:
             # Update analysis run statistics
@@ -204,6 +207,10 @@ class PersistenceService:
             
             # Create relationships
             self._create_relationships(analysis_run, static_analysis.all_symbols, symbol_map)
+            
+            # Phase 7: Persist API endpoints
+            if api_endpoints:
+                self.persist_api_endpoints(repository, analysis_run, api_endpoints, file_map, symbol_map)
             
             # Mark analysis as completed
             analysis_run.status = AnalysisStatus.COMPLETED
@@ -574,6 +581,138 @@ class PersistenceService:
         return new_commits
         
         return mapping.get(type_str, SymbolType.FUNCTION)
+    
+    def persist_api_endpoints(
+        self,
+        repository: Repository,
+        analysis_run: AnalysisRun,
+        endpoints: List,  # List[DetectedEndpoint] from api_route_analyzer
+        file_map: Dict[str, File],
+        symbol_map: Dict[str, Symbol]
+    ) -> int:
+        """
+        Persist API endpoints to database.
+        
+        Phase 7: API & Application Structure Intelligence
+        
+        This method:
+        1. Validates each endpoint
+        2. Links endpoint to File record
+        3. Attempts to resolve handler to Symbol record
+        4. Inserts ApiEndpoint record
+        
+        Handler Resolution:
+            The analyzer extracts handler_name from route definitions.
+            We attempt to find a matching Symbol in the symbol_map.
+            
+            Symbol lookup strategy:
+            - Look for function/method with matching name in the same file
+            - Match by: file_path:handler_name:function (or method)
+            
+            If resolution succeeds: symbol_id is set
+            If resolution fails: symbol_id remains NULL
+            
+            This maintains conservative factual reporting.
+        
+        Duplicate Handling:
+            Endpoints are unique by (analysis_run_id, method, path).
+            If a duplicate is encountered, it is skipped.
+        
+        Args:
+            repository: Repository model instance
+            analysis_run: AnalysisRun model instance
+            endpoints: List of DetectedEndpoint from ApiRouteAnalyzer
+            file_map: Dict mapping file path to File model
+            symbol_map: Dict mapping symbol key to Symbol model
+            
+        Returns:
+            Number of endpoints persisted
+            
+        Raises:
+            Exception: If persistence fails
+        """
+        from app.db.models import ApiEndpoint, HttpMethod
+        
+        if not endpoints:
+            logger.info("No API endpoints to persist")
+            return 0
+        
+        persisted_count = 0
+        
+        for endpoint in endpoints:
+            # Skip if no file_path (shouldn't happen, but be defensive)
+            if not endpoint.file_path:
+                logger.warning(f"Endpoint {endpoint.method} {endpoint.path} has no file_path")
+                continue
+            
+            # Find the File record for this endpoint
+            file_record = file_map.get(endpoint.file_path)
+            if not file_record:
+                logger.warning(f"File not found for endpoint: {endpoint.file_path}")
+                continue
+            
+            # Attempt to resolve handler to Symbol
+            symbol_id = None
+            if endpoint.handler_name:
+                # Try to find matching symbol in the same file
+                # Symbol map key format: file:name:type
+                
+                # Try function first
+                function_key = f"{endpoint.file_path}:{endpoint.handler_name}:function"
+                if function_key in symbol_map:
+                    symbol_id = symbol_map[function_key].id
+                else:
+                    # Try method
+                    method_key = f"{endpoint.file_path}:{endpoint.handler_name}:method"
+                    if method_key in symbol_map:
+                        symbol_id = symbol_map[method_key].id
+                    else:
+                        # Try arrow function
+                        arrow_key = f"{endpoint.file_path}:{endpoint.handler_name}:arrow_function"
+                        if arrow_key in symbol_map:
+                            symbol_id = symbol_map[arrow_key].id
+                
+                if symbol_id:
+                    logger.debug(f"Resolved handler {endpoint.handler_name} to symbol {symbol_id}")
+                else:
+                    logger.debug(f"Could not resolve handler {endpoint.handler_name}")
+            
+            # Map method string to HttpMethod enum
+            try:
+                http_method = HttpMethod[endpoint.method]
+            except KeyError:
+                logger.warning(f"Invalid HTTP method: {endpoint.method}")
+                continue
+            
+            # Create ApiEndpoint record
+            try:
+                api_endpoint = ApiEndpoint(
+                    repository_id=repository.id,
+                    analysis_run_id=analysis_run.id,
+                    file_id=file_record.id,
+                    symbol_id=symbol_id,
+                    method=http_method,
+                    path=endpoint.path,
+                    framework=endpoint.framework,
+                    handler_name=endpoint.handler_name,
+                    start_line=endpoint.start_line,
+                    end_line=endpoint.end_line
+                )
+                
+                self.db.add(api_endpoint)
+                self.db.flush()
+                
+                persisted_count += 1
+                
+            except IntegrityError as e:
+                # Duplicate endpoint - skip it
+                logger.warning(f"Duplicate endpoint: {endpoint.method} {endpoint.path}")
+                self.db.rollback()
+                continue
+        
+        logger.info(f"Persisted {persisted_count} API endpoints")
+        
+        return persisted_count
     
     def mark_analysis_failed(self, analysis_run: AnalysisRun, error_message: str) -> None:
         """

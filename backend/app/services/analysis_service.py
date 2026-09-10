@@ -38,6 +38,7 @@ from app.services.download_service import RepositoryDownloadService
 from app.services.scanner_service import FileScannerService
 from app.services.static_analyzer import StaticAnalyzer
 from app.services.persistence_service import PersistenceService
+from app.services.api_route_analyzer import ApiRouteAnalyzer
 from app.utils.zip_utils import safe_extract, find_repository_root
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class RepositoryAnalysisService:
             max_files=settings.MAX_REPOSITORY_FILES
         )
         self.static_analyzer = StaticAnalyzer()
+        self.api_route_analyzer = ApiRouteAnalyzer()  # Phase 7
         
         # Phase 4: Database persistence
         self.db = db
@@ -194,6 +196,17 @@ class RepositoryAnalysisService:
                 static_analysis_result.summary.total_imports = len(static_analysis_result.all_imports)
                 static_analysis_result.summary.total_calls = len(static_analysis_result.all_calls)
                 
+                # Phase 7: Extract API endpoints
+                api_endpoints = []
+                for file_path in file_paths:
+                    try:
+                        endpoints = self.api_route_analyzer.analyze_file(file_path)
+                        api_endpoints.extend(endpoints)
+                    except Exception as e:
+                        logger.warning(f"Failed to analyze API routes in {file_path}: {e}")
+                
+                logger.info(f"Detected {len(api_endpoints)} API endpoints")
+                
                 # Step 9: Persist results to PostgreSQL (Phase 4)
                 if persist and self.persistence_service and db_repository and db_analysis_run:
                     try:
@@ -215,7 +228,8 @@ class RepositoryAnalysisService:
                             repository=db_repository,
                             analysis_run=db_analysis_run,
                             static_analysis=static_analysis_result,
-                            file_metadata=file_metadata_dicts
+                            file_metadata=file_metadata_dicts,
+                            api_endpoints=api_endpoints if api_endpoints else None  # Phase 7
                         )
                         
                         logger.info(f"Successfully persisted analysis run: {db_analysis_run.id}")
