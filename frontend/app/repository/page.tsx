@@ -9,6 +9,7 @@ import { RepositoryAnalysisResponse, Symbol } from '@/types/repository';
 import { Loader2, AlertCircle, GitBranch, FileCode, HardDrive } from 'lucide-react';
 import DependencyExplorer from '@/components/DependencyExplorer';
 import GitHistory from '@/components/GitHistory';
+import ApiExplorer from '@/components/ApiExplorer';
 
 export default function RepositoryPage() {
   const [url, setUrl] = useState('');
@@ -390,6 +391,21 @@ export default function RepositoryPage() {
               {/* Phase 6: Git History */}
               {analysis.repository_id && (
                 <GitHistory repositoryId={analysis.repository_id} />
+              )}
+
+              {/* Phase 7: API Explorer */}
+              {analysis.repository_id && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>API Endpoints</CardTitle>
+                    <CardDescription>
+                      REST endpoints detected through static analysis
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ApiExplorer repositoryId={analysis.repository_id} />
+                  </CardContent>
+                </Card>
               )}
 
               {/* Files List */}
