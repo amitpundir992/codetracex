@@ -49,6 +49,69 @@ export interface Symbol {
   parent: string | null;
 }
 
+// Phase 7: API Endpoints Types
+
+export interface ApiEndpointSummary {
+  id: string;
+  method: string;
+  path: string;
+  framework: string;
+  handler_name: string | null;
+  start_line: number | null;
+  end_line: number | null;
+  file_path: string;
+}
+
+export interface SymbolInfo {
+  id: string;
+  name: string;
+  type: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+}
+
+export interface ApiEndpointDetail {
+  id: string;
+  method: string;
+  path: string;
+  framework: string;
+  handler_name: string | null;
+  start_line: number | null;
+  end_line: number | null;
+  repository_id: string;
+  analysis_run_id: string;
+  file_id: string;
+  file_path: string;
+  symbol_id: string | null;
+  handler_symbol: SymbolInfo | null;
+  created_at: string;
+}
+
+export interface PaginatedApiEndpointsResponse {
+  items: ApiEndpointSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface DependencyNode {
+  id: string;
+  name: string;
+  type: string;
+  file_path: string | null;
+}
+
+export interface ApiEndpointDependencies {
+  endpoint_id: string;
+  method: string;
+  path: string;
+  handler_name: string | null;
+  dependencies: DependencyNode[];
+  callers: DependencyNode[];
+}
+
 export interface Import {
   file: string;
   source: string;
