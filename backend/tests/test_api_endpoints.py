@@ -490,7 +490,7 @@ class TestApiEndpoints:
         # Would test full endpoint detail retrieval
         pass
     
-    def test_invalid_repository(self, client):
+    def test_invalid_repository(self, client, db):
         """Test 404 for non-existent repository."""
         fake_id = uuid4()
         response = client.get(f"/api/repositories/{fake_id}/endpoints")
