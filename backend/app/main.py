@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import repositories, analysis, retrieval, git_history, api_endpoints
+from app.api import repositories, analysis, retrieval, git_history, api_endpoints, workflow
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -26,6 +26,7 @@ app.include_router(analysis.router)
 app.include_router(retrieval.router)  # Phase 4: Retrieval endpoints
 app.include_router(git_history.router, prefix="/api")  # Phase 6: Git history endpoints
 app.include_router(api_endpoints.router, prefix="/api")  # Phase 7: API endpoints
+app.include_router(workflow.router, prefix="/api")  # Phase 8: Workflow endpoints
 
 
 @app.get("/health")
