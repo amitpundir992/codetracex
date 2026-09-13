@@ -27,7 +27,7 @@ This is the main entry point for Phase 2, Phase 3, and Phase 4 functionality.
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 
 from sqlalchemy.orm import Session
@@ -234,6 +234,20 @@ class RepositoryAnalysisService:
                         
                         logger.info(f"Successfully persisted analysis run: {db_analysis_run.id}")
                         
+                        # Phase 9: Generate embeddings and persist semantic chunks
+                        try:
+                            await self._generate_and_persist_embeddings(
+                                repository=db_repository,
+                                analysis_run=db_analysis_run,
+                                repo_root=repo_root,
+                                static_analysis=static_analysis_result,
+                                api_endpoints=api_endpoints
+                            )
+                        except Exception as embed_error:
+                            logger.error(f"Failed to generate embeddings: {str(embed_error)}")
+                            # Don't fail entire analysis if embeddings fail
+                            # This is a best-effort enhancement
+                        
                     except Exception as e:
                         logger.error(f"Failed to persist analysis results: {str(e)}")
                         
@@ -278,3 +292,167 @@ class RepositoryAnalysisService:
             
             # Re-raise the original exception
             raise
+
+
+    
+    async def _generate_and_persist_embeddings(
+        self,
+        repository: 'Repository',
+        analysis_run: 'AnalysisRun',
+        repo_root: Path,
+        static_analysis: 'StaticAnalysisResult',
+        api_endpoints: Optional[List] = None
+    ) -> None:
+        """
+        Generate embeddings and persist semantic chunks.
+        
+        Phase 9: Embeddings + pgvector
+        
+        This method:
+        1. Builds semantic chunks from symbols and API endpoints
+        2. Generates embeddings for chunk content
+        3. Persists chunks with embeddings to database
+        
+        Args:
+            repository: Repository model instance
+            analysis_run: AnalysisRun model instance
+            repo_root: Path to repository root (source files available)
+            static_analysis: Static analysis result
+            api_endpoints: Optional list of API endpoints
+        """
+        from app.services.chunk_builder import ChunkBuilder
+        from app.services.embedding_service import EmbeddingService
+        
+        logger.info("Starting embedding generation...")
+        
+        try:
+            # Initialize services
+            chunk_builder = ChunkBuilder(repo_root)
+            embedding_service = EmbeddingService()
+            
+            # Build file_path_map and extract persisted entities
+            # We need to query the database for the persisted entities
+            from app.db.models import File, Symbol, ApiEndpoint
+            
+            # Get persisted files for this analysis run
+            files = self.db.query(File).filter(
+                File.analysis_run_id == analysis_run.id
+            ).all()
+            
+            file_id_to_path = {str(f.id): f.path for f in files}
+            file_path_to_id = {f.path: str(f.id) for f in files}
+            
+            # Get persisted symbols
+            symbols = self.db.query(Symbol).filter(
+                Symbol.analysis_run_id == analysis_run.id
+            ).all()
+            
+            # Convert symbols to dict format for chunk builder
+            symbol_dicts = [
+                {
+                    'id': symbol.id,
+                    'file_id': str(symbol.file_id),
+                    'name': symbol.name,
+                    'symbol_type': symbol.symbol_type.value,
+                    'language': symbol.language,
+                    'start_line': symbol.start_line,
+                    'end_line': symbol.end_line
+                }
+                for symbol in symbols
+            ]
+            
+            # Get persisted API endpoints
+            endpoints = self.db.query(ApiEndpoint).filter(
+                ApiEndpoint.analysis_run_id == analysis_run.id
+            ).all()
+            
+            endpoint_dicts = [
+                {
+                    'id': endpoint.id,
+                    'file_id': str(endpoint.file_id),
+                    'method': endpoint.method.value,
+                    'path': endpoint.path,
+                    'framework': endpoint.framework,
+                    'handler_name': endpoint.handler_name,
+                    'start_line': endpoint.start_line,
+                    'end_line': endpoint.end_line
+                }
+                for endpoint in endpoints
+            ]
+            
+            # Build semantic chunks
+            chunks = chunk_builder.build_all_chunks(
+                symbols=symbol_dicts,
+                api_endpoints=endpoint_dicts,
+                file_path_map=file_id_to_path
+            )
+            
+            if not chunks:
+                logger.warning("No chunks generated for embedding")
+                return
+            
+            logger.info(f"Built {len(chunks)} semantic chunks")
+            
+            # Generate embeddings in batch
+            chunk_contents = [chunk.content for chunk in chunks]
+            embeddings = embedding_service.embed_batch(chunk_contents)
+            
+            # Attach embeddings to chunks
+            chunks_with_embeddings = []
+            for chunk, embedding in zip(chunks, embeddings):
+                if embedding:
+                    chunk_dict = {
+                        'chunk_type': chunk.chunk_type,
+                        'chunk_index': chunk.chunk_index,
+                        'content': chunk.content,
+                        'content_hash': chunk.content_hash,
+                        'language': chunk.language,
+                        'start_line': chunk.start_line,
+                        'end_line': chunk.end_line,
+                        'token_count': chunk.token_count,
+                        'embedding': embedding,
+                        'file_path': chunk.file_path,
+                        'symbol_name': chunk.symbol_name,
+                        'api_endpoint_method': chunk.api_endpoint_method,
+                        'api_endpoint_path': chunk.api_endpoint_path,
+                        'metadata': chunk.metadata
+                    }
+                    chunks_with_embeddings.append(chunk_dict)
+            
+            logger.info(f"Generated {len(chunks_with_embeddings)} embeddings")
+            
+            # Persist chunks with embeddings
+            if chunks_with_embeddings:
+                # Build file_map for persistence
+                file_map = {f.path: f for f in files}
+                
+                # Build symbol_map (key: file_path:symbol_name:symbol_type)
+                symbol_map = {}
+                for symbol in symbols:
+                    file_path = file_id_to_path.get(str(symbol.file_id))
+                    if file_path:
+                        key = f"{file_path}:{symbol.name}:{symbol.symbol_type.value}"
+                        symbol_map[key] = symbol
+                
+                # Build api_endpoint_map (key: method:path)
+                api_endpoint_map = {}
+                for endpoint in endpoints:
+                    key = f"{endpoint.method.value}:{endpoint.path}"
+                    api_endpoint_map[key] = endpoint
+                
+                # Persist chunks
+                chunk_count = self.persistence_service.persist_semantic_chunks(
+                    repository=repository,
+                    analysis_run=analysis_run,
+                    chunks=chunks_with_embeddings,
+                    file_map=file_map,
+                    symbol_map=symbol_map,
+                    api_endpoint_map=api_endpoint_map
+                )
+                
+                logger.info(f"Persisted {chunk_count} semantic chunks with embeddings")
+            
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {str(e)}", exc_info=True)
+            # Don't raise - this is a best-effort enhancement
+            # We don't want to fail the entire analysis if embeddings fail

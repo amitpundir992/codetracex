@@ -729,3 +729,147 @@ class PersistenceService:
         self.db.commit()
         
         logger.error(f"Marked analysis run {analysis_run.id} as failed: {error_message}")
+
+
+    
+    def persist_semantic_chunks(
+        self,
+        repository: Repository,
+        analysis_run: AnalysisRun,
+        chunks: List[Dict],
+        file_map: Dict[str, File],
+        symbol_map: Optional[Dict[str, Symbol]] = None,
+        api_endpoint_map: Optional[Dict[str, 'ApiEndpoint']] = None
+    ) -> int:
+        """
+        Persist semantic chunks with embeddings to database.
+        
+        Phase 9: Embeddings + pgvector
+        
+        This method persists semantic chunks after embedding generation.
+        
+        Args:
+            repository: Repository model instance
+            analysis_run: AnalysisRun model instance
+            chunks: List of chunk dictionaries with embeddings:
+                - chunk_type: "symbol", "api_endpoint", etc.
+                - chunk_index: Index for multi-chunk splits
+                - content: Text content
+                - content_hash: SHA-256 hash of content
+                - language: Programming language (optional)
+                - start_line: Starting line number
+                - end_line: Ending line number
+                - token_count: Estimated token count
+                - embedding: List of floats (embedding vector)
+                - file_path: Relative file path
+                - symbol_name: Symbol name (optional)
+                - api_endpoint_method: HTTP method (optional)
+                - api_endpoint_path: API path (optional)
+                - metadata: Optional metadata dict
+            file_map: Dict mapping file path to File model
+            symbol_map: Dict mapping symbol key to Symbol model (optional)
+            api_endpoint_map: Dict mapping endpoint key to ApiEndpoint model (optional)
+            
+        Returns:
+            Number of chunks persisted
+            
+        Raises:
+            Exception: If persistence fails
+        """
+        from app.db.models import SemanticChunk, ChunkType
+        import json
+        
+        if not chunks:
+            logger.info("No semantic chunks to persist")
+            return 0
+        
+        persisted_count = 0
+        
+        for chunk in chunks:
+            # Skip if no file_path
+            if not chunk.get('file_path'):
+                logger.warning(f"Chunk has no file_path")
+                continue
+            
+            # Find the File record
+            file_record = file_map.get(chunk['file_path'])
+            if not file_record:
+                logger.warning(f"File not found for chunk: {chunk['file_path']}")
+                continue
+            
+            # Skip if no embedding
+            if not chunk.get('embedding'):
+                logger.debug(f"Chunk has no embedding, skipping: {chunk.get('content_hash')}")
+                continue
+            
+            # Resolve symbol_id if applicable
+            symbol_id = None
+            if chunk.get('chunk_type') == 'symbol' and chunk.get('symbol_name') and symbol_map:
+                # Try to find matching symbol
+                symbol_type = chunk.get('metadata', {}).get('symbol_type', 'function')
+                symbol_key = f"{chunk['file_path']}:{chunk['symbol_name']}:{symbol_type}"
+                if symbol_key in symbol_map:
+                    symbol_id = symbol_map[symbol_key].id
+            
+            # Resolve api_endpoint_id if applicable
+            api_endpoint_id = None
+            if chunk.get('chunk_type') == 'api_endpoint' and api_endpoint_map:
+                method = chunk.get('api_endpoint_method')
+                path = chunk.get('api_endpoint_path')
+                if method and path:
+                    endpoint_key = f"{method}:{path}"
+                    if endpoint_key in api_endpoint_map:
+                        api_endpoint_id = api_endpoint_map[endpoint_key].id
+            
+            # Map chunk_type string to ChunkType enum
+            try:
+                chunk_type_enum = ChunkType[chunk['chunk_type'].upper()]
+            except KeyError:
+                logger.warning(f"Invalid chunk type: {chunk.get('chunk_type')}")
+                continue
+            
+            # Serialize metadata to JSON if present
+            metadata_json = None
+            if chunk.get('metadata'):
+                try:
+                    metadata_json = json.dumps(chunk['metadata'])
+                except Exception as e:
+                    logger.warning(f"Failed to serialize metadata: {e}")
+            
+            # Create SemanticChunk record
+            try:
+                semantic_chunk = SemanticChunk(
+                    repository_id=repository.id,
+                    analysis_run_id=analysis_run.id,
+                    file_id=file_record.id,
+                    symbol_id=symbol_id,
+                    api_endpoint_id=api_endpoint_id,
+                    chunk_type=chunk_type_enum,
+                    chunk_index=chunk.get('chunk_index', 0),
+                    content=chunk['content'],
+                    content_hash=chunk['content_hash'],
+                    language=chunk.get('language'),
+                    start_line=chunk['start_line'],
+                    end_line=chunk['end_line'],
+                    token_count=chunk.get('token_count'),
+                    embedding=chunk['embedding'],
+                    metadata_json=metadata_json
+                )
+                
+                self.db.add(semantic_chunk)
+                self.db.flush()
+                
+                persisted_count += 1
+                
+            except IntegrityError as e:
+                # Duplicate chunk - skip it
+                logger.warning(f"Duplicate chunk: {chunk.get('content_hash')}")
+                self.db.rollback()
+                continue
+            except Exception as e:
+                logger.error(f"Failed to persist chunk: {e}")
+                raise
+        
+        logger.info(f"Persisted {persisted_count} semantic chunks")
+        
+        return persisted_count
