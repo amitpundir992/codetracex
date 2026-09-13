@@ -38,6 +38,13 @@ class Settings:
     # Maximum number of files to scan (default: 10000)
     MAX_REPOSITORY_FILES: int = int(os.getenv("MAX_REPOSITORY_FILES", "10000"))
     
+    # Embeddings Configuration
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "sentence-transformers")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+    MAX_EMBEDDING_CONTENT_LENGTH: int = int(os.getenv("MAX_EMBEDDING_CONTENT_LENGTH", "2000"))
+    EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
+    
     @property
     def max_repository_size_bytes(self) -> int:
         """Convert MAX_REPOSITORY_SIZE_MB to bytes."""

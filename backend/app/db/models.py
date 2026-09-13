@@ -48,6 +48,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 import enum
 
 from app.db.session import Base
@@ -811,3 +812,149 @@ class ApiEndpoint(Base):
     
     def __repr__(self):
         return f"<ApiEndpoint {self.method.value} {self.path}>"
+
+
+class ChunkType(str, enum.Enum):
+    """
+    Type of semantic chunk for embeddings.
+    
+    Phase 9: Embeddings + pgvector
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    
+    SYMBOL - Code symbol (function, class, method)
+    API_ENDPOINT - API endpoint with handler
+    DOCUMENTATION - Documentation section (README, markdown)
+    FILE - Entire file (fallback for small files)
+    """
+    SYMBOL = "symbol"
+    API_ENDPOINT = "api_endpoint"
+    DOCUMENTATION = "documentation"
+    FILE = "file"
+
+
+class SemanticChunk(Base):
+    """
+    Represents a semantic chunk with embedding for similarity search.
+    
+    Phase 9: Embeddings + pgvector
+    
+    Semantic chunks are deterministic units of repository intelligence:
+    - Functions, classes, methods (from symbols)
+    - API endpoints with handlers
+    - Documentation sections
+    
+    Why chunks?
+    
+    Repository code cannot be embedded as one giant block.
+    Chunking enables:
+    - Focused retrieval of relevant code sections
+    - Efficient similarity search
+    - Source traceability to exact lines
+    - Later: RAG with precise context
+    
+    Architecture:
+        Repository → AnalysisRun → SemanticChunk → Symbol/File/ApiEndpoint
+    
+    Content Hashing:
+        Each chunk has deterministic identity via content_hash.
+        Same content = same hash = avoid duplicate embeddings.
+        Changed content = different hash = regenerate embedding.
+    
+    Vector Dimension:
+        The embedding dimension must match the embedding model.
+        Default: 384 (sentence-transformers/all-MiniLM-L6-v2)
+        Configurable via environment variable.
+    
+    Source Traceability:
+        Every chunk links back to:
+        - Repository
+        - Analysis run
+        - File
+        - Symbol (if chunk represents a symbol)
+        - API endpoint (if chunk represents an endpoint)
+        - Source line ranges
+        
+        This enables precise source citations for later RAG.
+    
+    Chunking Strategy:
+        - Symbols: One chunk per symbol (function/class/method)
+        - Large symbols (>2000 chars): Split deterministically but preserve identity
+        - API endpoints: One chunk per endpoint+handler
+        - Documentation: Split by headers/sections
+        - Small files: Entire file as one chunk (fallback)
+    
+    Update Semantics:
+        Chunks are tied to analysis_run_id.
+        New analysis = new chunks.
+        Stale chunks from old analyses remain for historical queries.
+        Query should filter by latest analysis_run_id unless time travel is desired.
+    
+    Fields:
+        id: Internal UUID primary key
+        repository_id: Repository this chunk belongs to
+        analysis_run_id: Analysis run that generated this chunk
+        file_id: File this chunk originates from
+        symbol_id: Symbol this chunk represents (nullable)
+        api_endpoint_id: API endpoint this chunk represents (nullable)
+        chunk_type: Type of chunk (symbol/api_endpoint/documentation/file)
+        chunk_index: Index for multi-chunk splits (0 for single chunks)
+        content: Text content of the chunk
+        content_hash: SHA-256 hash of content (for deduplication)
+        language: Programming language (nullable for documentation)
+        start_line: Starting line in source file
+        end_line: Ending line in source file
+        token_count: Approximate token count (for monitoring)
+        embedding: Vector embedding (pgvector)
+        metadata_json: Optional JSON metadata (for extensibility)
+        created_at: When this chunk was created
+    
+    Relationships:
+        repository: Parent repository
+        analysis_run: Analysis run that generated this chunk
+        file: Source file
+        symbol: Source symbol (if applicable)
+        api_endpoint: Source API endpoint (if applicable)
+    """
+    __tablename__ = "semantic_chunks"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
+    analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    symbol_id = Column(UUID(as_uuid=True), ForeignKey("symbols.id", ondelete="CASCADE"))
+    api_endpoint_id = Column(UUID(as_uuid=True), ForeignKey("api_endpoints.id", ondelete="CASCADE"))
+    chunk_type = Column(Enum(ChunkType, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    chunk_index = Column(Integer, default=0, nullable=False)
+    content = Column(Text, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    language = Column(String(100))
+    start_line = Column(Integer, nullable=False)
+    end_line = Column(Integer, nullable=False)
+    token_count = Column(Integer)
+    embedding = Column(Vector(384))  # pgvector column - dimension 384 for all-MiniLM-L6-v2
+    metadata_json = Column(Text)  # JSON string for extensibility
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    repository = relationship("Repository", backref="semantic_chunks")
+    analysis_run = relationship("AnalysisRun", backref="semantic_chunks")
+    file = relationship("File", backref="semantic_chunks")
+    symbol = relationship("Symbol", backref="semantic_chunks")
+    api_endpoint = relationship("ApiEndpoint", backref="semantic_chunks")
+    
+    # Indexes and Constraints
+    __table_args__ = (
+        Index("idx_semantic_chunks_repository_id", "repository_id"),
+        Index("idx_semantic_chunks_analysis_run_id", "analysis_run_id"),
+        Index("idx_semantic_chunks_file_id", "file_id"),
+        Index("idx_semantic_chunks_symbol_id", "symbol_id"),
+        Index("idx_semantic_chunks_api_endpoint_id", "api_endpoint_id"),
+        Index("idx_semantic_chunks_chunk_type", "chunk_type"),
+        Index("idx_semantic_chunks_content_hash", "content_hash"),
+        # Unique constraint for deduplication within an analysis run
+        UniqueConstraint("analysis_run_id", "content_hash", "chunk_index", name="uq_semantic_chunks_analysis_run_hash_index"),
+    )
+    
+    def __repr__(self):
+        return f"<SemanticChunk {self.chunk_type.value} {self.id}>"
