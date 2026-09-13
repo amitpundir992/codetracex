@@ -2,6 +2,7 @@
  * API Explorer component for Phase 7.
  * 
  * Displays detected API endpoints with filtering, details, and dependency information.
+ * Integrated with Phase 8 Workflow Explorer for application flow visualization.
  */
 'use client';
 
@@ -10,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getRepositoryEndpoints, getEndpointDetails, getEndpointDependencies, APIError } from '@/lib/api';
 import type { ApiEndpointSummary, ApiEndpointDetail, ApiEndpointDependencies } from '@/types/repository';
+import WorkflowExplorer from './WorkflowExplorer';
 
 interface ApiExplorerProps {
   repositoryId: string;
@@ -25,6 +27,7 @@ export default function ApiExplorer({ repositoryId }: ApiExplorerProps) {
   const [frameworkFilter, setFrameworkFilter] = useState<string>('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const [activeView, setActiveView] = useState<'details' | 'workflow'>('details');
   
   useEffect(() => {
     loadEndpoints();
@@ -199,74 +202,109 @@ export default function ApiExplorer({ repositoryId }: ApiExplorerProps) {
         <Card className="p-4">
           <h3 className="text-lg font-semibold mb-4">Endpoint Details</h3>
           
-          <div className="space-y-3">
-            <div>
-              <span className={`px-2 py-1 rounded text-xs font-semibold ${getMethodColor(selectedEndpoint.method)}`}>
-                {selectedEndpoint.method}
-              </span>
-              <span className="ml-3 font-mono font-semibold text-lg">{selectedEndpoint.path}</span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-sm">
+          {/* Tab Navigation */}
+          <div className="flex gap-2 mb-4 border-b">
+            <button
+              onClick={() => setActiveView('details')}
+              className={`px-4 py-2 font-medium ${
+                activeView === 'details' 
+                  ? 'border-b-2 border-blue-500 text-blue-600' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Details & Dependencies
+            </button>
+            <button
+              onClick={() => setActiveView('workflow')}
+              className={`px-4 py-2 font-medium ${
+                activeView === 'workflow' 
+                  ? 'border-b-2 border-blue-500 text-blue-600' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Workflow
+            </button>
+          </div>
+          
+          {/* Details View */}
+          {activeView === 'details' && (
+            <div className="space-y-3">
               <div>
-                <span className="font-semibold">Framework:</span> {selectedEndpoint.framework}
+                <span className={`px-2 py-1 rounded text-xs font-semibold ${getMethodColor(selectedEndpoint.method)}`}>
+                  {selectedEndpoint.method}
+                </span>
+                <span className="ml-3 font-mono font-semibold text-lg">{selectedEndpoint.path}</span>
               </div>
-              <div>
-                <span className="font-semibold">Handler:</span> {selectedEndpoint.handler_name || 'N/A'}
-              </div>
-              <div>
-                <span className="font-semibold">File:</span> {selectedEndpoint.file_path}
-              </div>
-              <div>
-                <span className="font-semibold">Lines:</span> {selectedEndpoint.start_line} - {selectedEndpoint.end_line}
-              </div>
-            </div>
-            
-            {selectedEndpoint.handler_symbol && (
-              <div className="mt-4">
-                <h4 className="font-semibold mb-2">Handler Symbol:</h4>
-                <div className="bg-gray-50 p-3 rounded text-sm">
-                  <div><span className="font-semibold">Name:</span> {selectedEndpoint.handler_symbol.name}</div>
-                  <div><span className="font-semibold">Type:</span> {selectedEndpoint.handler_symbol.type}</div>
-                  <div><span className="font-semibold">File:</span> {selectedEndpoint.handler_symbol.file_path}</div>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-semibold">Framework:</span> {selectedEndpoint.framework}
+                </div>
+                <div>
+                  <span className="font-semibold">Handler:</span> {selectedEndpoint.handler_name || 'N/A'}
+                </div>
+                <div>
+                  <span className="font-semibold">File:</span> {selectedEndpoint.file_path}
+                </div>
+                <div>
+                  <span className="font-semibold">Lines:</span> {selectedEndpoint.start_line} - {selectedEndpoint.end_line}
                 </div>
               </div>
-            )}
-            
-            {dependencies && (
-              <div className="mt-4">
-                <h4 className="font-semibold mb-2">Dependencies:</h4>
-                
-                {dependencies.dependencies.length > 0 ? (
-                  <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-sm font-semibold mb-2">Called by this endpoint:</p>
-                    <ul className="text-sm space-y-1">
-                      {dependencies.dependencies.map((dep) => (
-                        <li key={dep.id} className="ml-4">
-                          → {dep.name} <span className="text-gray-500">({dep.file_path})</span>
-                        </li>
-                      ))}
-                    </ul>
+              
+              {selectedEndpoint.handler_symbol && (
+                <div className="mt-4">
+                  <h4 className="font-semibold mb-2">Handler Symbol:</h4>
+                  <div className="bg-gray-50 p-3 rounded text-sm">
+                    <div><span className="font-semibold">Name:</span> {selectedEndpoint.handler_symbol.name}</div>
+                    <div><span className="font-semibold">Type:</span> {selectedEndpoint.handler_symbol.type}</div>
+                    <div><span className="font-semibold">File:</span> {selectedEndpoint.handler_symbol.file_path}</div>
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No downstream dependencies detected</p>
-                )}
-                
-                {dependencies.callers.length > 0 && (
-                  <div className="bg-gray-50 p-3 rounded mt-2">
-                    <p className="text-sm font-semibold mb-2">Calls this endpoint:</p>
-                    <ul className="text-sm space-y-1">
-                      {dependencies.callers.map((caller) => (
-                        <li key={caller.id} className="ml-4">
-                          ← {caller.name} <span className="text-gray-500">({caller.file_path})</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+              
+              {dependencies && (
+                <div className="mt-4">
+                  <h4 className="font-semibold mb-2">Dependencies:</h4>
+                  
+                  {dependencies.dependencies.length > 0 ? (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <p className="text-sm font-semibold mb-2">Called by this endpoint:</p>
+                      <ul className="text-sm space-y-1">
+                        {dependencies.dependencies.map((dep) => (
+                          <li key={dep.id} className="ml-4">
+                            → {dep.name} <span className="text-gray-500">({dep.file_path})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No downstream dependencies detected</p>
+                  )}
+                  
+                  {dependencies.callers.length > 0 && (
+                    <div className="bg-gray-50 p-3 rounded mt-2">
+                      <p className="text-sm font-semibold mb-2">Calls this endpoint:</p>
+                      <ul className="text-sm space-y-1">
+                        {dependencies.callers.map((caller) => (
+                          <li key={caller.id} className="ml-4">
+                            ← {caller.name} <span className="text-gray-500">({caller.file_path})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Workflow View */}
+          {activeView === 'workflow' && (
+            <WorkflowExplorer
+              repositoryId={repositoryId}
+              endpointId={selectedEndpoint.id}
+            />
+          )}
         </Card>
       )}
     </div>

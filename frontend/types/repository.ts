@@ -319,3 +319,36 @@ export interface CoChangeResponse {
   co_changes: CoChangeFile[];
   total_co_changes: number;
 }
+
+// Phase 8: Workflow & Data-Flow Intelligence Types
+
+export interface WorkflowNode {
+  id: string;
+  type: string; // endpoint, symbol, file, external_module
+  name: string;
+  file_path?: string | null;
+  start_line?: number | null;
+  end_line?: number | null;
+  language?: string | null;
+  symbol_type?: string | null; // function, class, method
+  method?: string | null; // HTTP method for endpoint nodes
+  path?: string | null; // Endpoint path for endpoint nodes
+}
+
+export interface WorkflowEdge {
+  source: string; // Source node ID
+  target: string; // Target node ID
+  type: string; // handles, calls, returns
+  line_number?: number | null;
+}
+
+export interface WorkflowResponse {
+  start_node: WorkflowNode;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  node_count: number;
+  edge_count: number;
+  depth: number;
+  truncated: boolean;
+  truncation_reason?: string | null;
+}
