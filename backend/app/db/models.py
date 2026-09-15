@@ -46,7 +46,7 @@ from sqlalchemy import (
     Column, String, Integer, BigInteger, Boolean, DateTime, Text,
     ForeignKey, Enum, Index, UniqueConstraint
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 import enum
@@ -928,6 +928,7 @@ class SemanticChunk(Base):
     chunk_index = Column(Integer, default=0, nullable=False)
     content = Column(Text, nullable=False)
     content_hash = Column(String(64), nullable=False)
+    content_tsv = Column(TSVECTOR)  # Phase 10: Full-text search vector (auto-populated by trigger)
     language = Column(String(100))
     start_line = Column(Integer, nullable=False)
     end_line = Column(Integer, nullable=False)
