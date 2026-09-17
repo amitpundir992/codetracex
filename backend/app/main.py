@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import repositories, analysis, retrieval, git_history, api_endpoints, workflow, semantic_search, hybrid_search
+from app.api import repositories, analysis, retrieval, git_history, api_endpoints, workflow, semantic_search, hybrid_search, rag_context
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -29,6 +29,7 @@ app.include_router(api_endpoints.router, prefix="/api")  # Phase 7: API endpoint
 app.include_router(workflow.router, prefix="/api")  # Phase 8: Workflow endpoints
 app.include_router(semantic_search.router)  # Phase 9: Semantic search endpoints
 app.include_router(hybrid_search.router)  # Phase 10: Hybrid search endpoints
+app.include_router(rag_context.router)  # Phase 11: RAG context endpoints
 
 
 @app.get("/health")
