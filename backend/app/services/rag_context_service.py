@@ -303,7 +303,7 @@ class RAGContextService:
                 AnalysisRun.repository_id == repository_id,
                 AnalysisRun.status == AnalysisStatus.COMPLETED
             )
-            .order_by(AnalysisRun.created_at.desc())
+            .order_by(AnalysisRun.started_at.desc())
             .first()
         )
         
