@@ -93,8 +93,10 @@ def sample_data_with_chunks(
     db.add(symbol)
     
     # Create chunk with embedding
+    import hashlib
     content = "def authenticate_user(self, username, password):\n    return verify_credentials(username, password)"
     embedding = embedding_service.embed(content)
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
     
     chunk = SemanticChunk(
         id=uuid4(),
@@ -103,6 +105,7 @@ def sample_data_with_chunks(
         file_id=file.id,
         symbol_id=symbol.id,
         content=content,
+        content_hash=content_hash,
         chunk_type=ChunkType.SYMBOL,
         start_line=10,
         end_line=12,

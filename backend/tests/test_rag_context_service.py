@@ -105,6 +105,7 @@ def sample_chunks_with_embeddings(
 ) -> list:
     """Create sample chunks with embeddings for testing."""
     from app.services.embedding_service import EmbeddingService
+    import hashlib
     
     embedding_service = EmbeddingService()
     
@@ -113,6 +114,7 @@ def sample_chunks_with_embeddings(
     # Chunk 1: High relevance to authentication
     content1 = "def authenticate_user(self, username, password):\n    # Verify credentials\n    user = self.db.get_user(username)\n    if user and verify_password(password, user.password_hash):\n        return create_jwt_token(user)"
     embedding1 = embedding_service.embed(content1)
+    hash1 = hashlib.sha256(content1.encode()).hexdigest()
     
     chunk1 = SemanticChunk(
         id=uuid4(),
@@ -121,6 +123,7 @@ def sample_chunks_with_embeddings(
         file_id=sample_file.id,
         symbol_id=sample_symbol.id,
         content=content1,
+        content_hash=hash1,
         chunk_type=ChunkType.SYMBOL,
         start_line=10,
         end_line=15,
@@ -133,6 +136,7 @@ def sample_chunks_with_embeddings(
     # Chunk 2: Medium relevance
     content2 = "def verify_password(password, hash):\n    return bcrypt.checkpw(password.encode(), hash)"
     embedding2 = embedding_service.embed(content2)
+    hash2 = hashlib.sha256(content2.encode()).hexdigest()
     
     chunk2 = SemanticChunk(
         id=uuid4(),
@@ -140,6 +144,7 @@ def sample_chunks_with_embeddings(
         analysis_run_id=sample_analysis_run.id,
         file_id=sample_file.id,
         content=content2,
+        content_hash=hash2,
         chunk_type=ChunkType.SYMBOL,
         start_line=20,
         end_line=22,
@@ -152,6 +157,7 @@ def sample_chunks_with_embeddings(
     # Chunk 3: Lower relevance
     content3 = "class AuthService:\n    def __init__(self, db):\n        self.db = db"
     embedding3 = embedding_service.embed(content3)
+    hash3 = hashlib.sha256(content3.encode()).hexdigest()
     
     chunk3 = SemanticChunk(
         id=uuid4(),
@@ -160,6 +166,7 @@ def sample_chunks_with_embeddings(
         file_id=sample_file.id,
         symbol_id=sample_symbol.id,
         content=content3,
+        content_hash=hash3,
         chunk_type=ChunkType.SYMBOL,
         start_line=5,
         end_line=7,
