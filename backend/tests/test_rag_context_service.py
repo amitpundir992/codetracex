@@ -282,7 +282,8 @@ class TestRAGContextService:
         )
         
         for evidence in context.evidence:
-            assert len(evidence.content) <= 60  # Allow for truncation marker
+            # Truncation marker is "\n... [truncated]" (16 chars), so 50 + 16 = 66
+            assert len(evidence.content) <= 66
     
     def test_deterministic_ordering(
         self,
@@ -516,13 +517,16 @@ class TestRAGContextService:
         sample_chunks_with_embeddings: list
     ):
         """Test that latest analysis run is used when not specified."""
-        # Create an older analysis run
+        from datetime import timedelta
+        
+        # Create an older analysis run with earlier timestamp
         older_run = AnalysisRun(
             id=uuid4(),
             repository_id=sample_repository.id,
             status=AnalysisStatus.COMPLETED,
             total_files=1,
-            total_symbols=1
+            total_symbols=1,
+            started_at=sample_analysis_run.started_at - timedelta(days=1)
         )
         db.add(older_run)
         db.commit()
