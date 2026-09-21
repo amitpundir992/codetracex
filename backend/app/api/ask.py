@@ -201,9 +201,10 @@ def ask_repository_question(
             detail=f"LLM rate limit exceeded: {str(e)}"
         )
     except LLMProviderError as e:
+        # Generic error message to avoid leaking sensitive information
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"LLM service failed: {str(e)}"
+            detail="LLM service failed. Please check configuration and try again."
         )
     except ValueError as e:
         # Repository or analysis run validation errors

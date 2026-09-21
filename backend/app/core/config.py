@@ -45,6 +45,14 @@ class Settings:
     MAX_EMBEDDING_CONTENT_LENGTH: int = int(os.getenv("MAX_EMBEDDING_CONTENT_LENGTH", "2000"))
     EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
     
+    # LLM Configuration (Phase 12)
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-1.5-flash")
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
+    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4096"))
+    
     @property
     def max_repository_size_bytes(self) -> int:
         """Convert MAX_REPOSITORY_SIZE_MB to bytes."""
