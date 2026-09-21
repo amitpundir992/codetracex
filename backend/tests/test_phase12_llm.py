@@ -94,7 +94,7 @@ def sample_rag_context(db):
         name="test-repo",
         full_name="test-owner/test-repo",
         owner="test-owner",
-        url="https://github.com/test-owner/test-repo",
+        github_url="https://github.com/test-owner/test-repo",
         default_branch="main",
     )
     db.add(repo)
@@ -105,7 +105,6 @@ def sample_rag_context(db):
         repository_id=repo.id,
         status="completed",
         total_files=10,
-        total_size_bytes=10000,
     )
     db.add(run)
     
@@ -190,6 +189,8 @@ def sample_rag_context(db):
         truncated=False,
         truncation_reason=None,
         retrieval_metadata=RetrievalMetadata(
+            total_candidates=20,
+            selected_evidence=2,
             top_k=10,
             semantic_weight=0.5,
             keyword_weight=0.5,
@@ -311,6 +312,8 @@ def test_prompt_builder_no_evidence(db):
         truncated=False,
         truncation_reason=None,
         retrieval_metadata=RetrievalMetadata(
+            total_candidates=20,
+            selected_evidence=2,
             top_k=10,
             semantic_weight=0.5,
             keyword_weight=0.5,
@@ -411,6 +414,8 @@ def test_llm_service_no_evidence(
         truncated=False,
         truncation_reason=None,
         retrieval_metadata=RetrievalMetadata(
+            total_candidates=20,
+            selected_evidence=2,
             top_k=10,
             semantic_weight=0.5,
             keyword_weight=0.5,
@@ -585,7 +590,7 @@ def test_ask_api_missing_llm_config(db):
         name="test-repo",
         full_name="test-owner/test-repo",
         owner="test-owner",
-        url="https://github.com/test-owner/test-repo",
+        github_url="https://github.com/test-owner/test-repo",
         default_branch="main",
     )
     db.add(repo)
@@ -627,7 +632,7 @@ def test_ask_api_invalid_question(db):
         name="test-repo",
         full_name="test-owner/test-repo",
         owner="test-owner",
-        url="https://github.com/test-owner/test-repo",
+        github_url="https://github.com/test-owner/test-repo",
         default_branch="main",
     )
     db.add(repo)
@@ -652,7 +657,7 @@ def test_ask_api_rate_limit(db):
         name="test-repo",
         full_name="test-owner/test-repo",
         owner="test-owner",
-        url="https://github.com/test-owner/test-repo",
+        github_url="https://github.com/test-owner/test-repo",
         default_branch="main",
     )
     db.add(repo)
@@ -690,7 +695,7 @@ def test_repository_isolation(db, mock_llm_provider):
         name="repo1",
         full_name="owner/repo1",
         owner="owner",
-        url="https://github.com/owner/repo1",
+        github_url="https://github.com/owner/repo1",
         default_branch="main",
     )
     repo2 = Repository(
@@ -698,7 +703,7 @@ def test_repository_isolation(db, mock_llm_provider):
         name="repo2",
         full_name="owner/repo2",
         owner="owner",
-        url="https://github.com/owner/repo2",
+        github_url="https://github.com/owner/repo2",
         default_branch="main",
     )
     db.add_all([repo1, repo2])
@@ -742,7 +747,7 @@ def test_api_key_not_exposed_in_response(db):
         name="test-repo",
         full_name="owner/test-repo",
         owner="owner",
-        url="https://github.com/owner/test-repo",
+        github_url="https://github.com/owner/test-repo",
         default_branch="main",
     )
     db.add(repo)
@@ -826,7 +831,7 @@ def test_phase11_rag_context_still_works(db):
         name="test-repo",
         full_name="owner/test-repo",
         owner="owner",
-        url="https://github.com/owner/test-repo",
+        github_url="https://github.com/owner/test-repo",
         default_branch="main",
     )
     run = AnalysisRun(
@@ -834,7 +839,6 @@ def test_phase11_rag_context_still_works(db):
         repository_id=repo.id,
         status="completed",
         total_files=1,
-        total_size_bytes=100,
     )
     db.add_all([repo, run])
     db.commit()
