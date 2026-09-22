@@ -23,9 +23,8 @@ def test_data(db: Session):
         name="test-repo",
         full_name="test/test-repo",
         owner="test",
-        url="https://github.com/test/test-repo",
+        github_url="https://github.com/test/test-repo",
         default_branch="main",
-        visibility="public",
         description="Test repository"
     )
     db.add(repo)
@@ -33,8 +32,7 @@ def test_data(db: Session):
     analysis_run = AnalysisRun(
         id=uuid4(),
         repository_id=repo.id,
-        status=AnalysisStatus.COMPLETED,
-        commit_sha="abc123"
+        status=AnalysisStatus.COMPLETED
     )
     db.add(analysis_run)
     
@@ -42,10 +40,10 @@ def test_data(db: Session):
         id=uuid4(),
         repository_id=repo.id,
         analysis_run_id=analysis_run.id,
-        file_path="src/service.py",
+        path="src/service.py",
+        filename="service.py",
         language="python",
-        size_bytes=1000,
-        is_binary=False
+        size_bytes=1000
     )
     db.add(file1)
     

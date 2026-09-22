@@ -31,8 +31,7 @@ def sample_graph(db: Session):
     analysis_run = AnalysisRun(
         id=uuid4(),
         repository_id=repo.id,
-        status=AnalysisStatus.COMPLETED,
-        commit_sha="abc123"
+        status=AnalysisStatus.COMPLETED
     )
     db.add(analysis_run)
     
