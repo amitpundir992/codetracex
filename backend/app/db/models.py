@@ -60,15 +60,21 @@ class AnalysisStatus(str, enum.Enum):
     
     Inheriting from str ensures SQLAlchemy serializes the value not the name.
     
-    pending - Analysis queued but not started
+    Phase 14: Enhanced for background job processing
+    
+    queued - Analysis job queued in Redis, waiting for worker
+    pending - Analysis queued but not started (legacy, maps to queued)
     running - Analysis currently in progress
     completed - Analysis finished successfully
     failed - Analysis failed with error
+    cancelled - Analysis was cancelled by user
     """
-    PENDING = "pending"
+    QUEUED = "queued"
+    PENDING = "pending"  # Legacy, maps to queued
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class SymbolType(str, enum.Enum):
@@ -208,17 +214,20 @@ class AnalysisRun(Base):
     - Rollback to previous state
     - Historical queries
     
-    Lifecycle:
-    1. Create AnalysisRun (status=pending)
-    2. Start analysis (status=running)
-    3. Extract symbols, imports, calls
-    4. Persist to database
+    Lifecycle (Phase 14 - Background Jobs):
+    1. Create AnalysisRun (status=queued)
+    2. Enqueue job in Redis queue
+    3. Worker picks up job (status=running)
+    4. Worker executes pipeline stages with progress updates
     5. Mark completed or failed
     
     Fields:
         id: Internal UUID primary key
         repository_id: Foreign key to repositories
-        status: Current status (pending/running/completed/failed)
+        status: Current status (queued/pending/running/completed/failed/cancelled)
+        job_id: RQ job identifier (Phase 14)
+        progress: Progress percentage 0-100 (Phase 14)
+        current_stage: Current pipeline stage description (Phase 14)
         total_files: Total files scanned
         analyzed_files: Files successfully analyzed
         total_symbols: Total symbols extracted
@@ -240,7 +249,13 @@ class AnalysisRun(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
-    status = Column(Enum(AnalysisStatus, values_callable=lambda x: [e.value for e in x]), default=AnalysisStatus.PENDING, nullable=False)
+    status = Column(Enum(AnalysisStatus, values_callable=lambda x: [e.value for e in x]), default=AnalysisStatus.QUEUED, nullable=False)
+    
+    # Phase 14: Background job tracking
+    job_id = Column(String(255))  # RQ job identifier
+    progress = Column(Integer, default=0)  # Progress percentage 0-100
+    current_stage = Column(String(255))  # Current pipeline stage
+    
     total_files = Column(Integer, default=0)
     analyzed_files = Column(Integer, default=0)
     total_symbols = Column(Integer, default=0)
@@ -263,6 +278,7 @@ class AnalysisRun(Base):
         Index("idx_analysis_runs_repository_id", "repository_id"),
         Index("idx_analysis_runs_status", "status"),
         Index("idx_analysis_runs_started_at", "started_at"),
+        Index("idx_analysis_runs_job_id", "job_id"),  # Phase 14
     )
     
     def __repr__(self):
