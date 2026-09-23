@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import repositories, analysis, retrieval, git_history, api_endpoints, workflow, semantic_search, hybrid_search, rag_context, ask, impact_analysis
+from app.api import repositories, analysis, retrieval, git_history, api_endpoints, workflow, semantic_search, hybrid_search, rag_context, ask, impact_analysis, jobs
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -32,6 +32,7 @@ app.include_router(hybrid_search.router)  # Phase 10: Hybrid search endpoints
 app.include_router(rag_context.router)  # Phase 11: RAG context endpoints
 app.include_router(ask.router)  # Phase 12: LLM Ask endpoints
 app.include_router(impact_analysis.router)  # Phase 13: Impact Analysis endpoints
+app.include_router(jobs.router)  # Phase 14: Background Jobs endpoints
 
 
 @app.get("/health")
