@@ -53,6 +53,13 @@ class Settings:
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4096"))
     
+    # Background Jobs Configuration (Phase 14)
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    WORKER_CONCURRENCY: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
+    MAX_CONCURRENT_ANALYSIS_JOBS: int = int(os.getenv("MAX_CONCURRENT_ANALYSIS_JOBS", "2"))
+    JOB_TIMEOUT: int = int(os.getenv("JOB_TIMEOUT", "3600"))  # 1 hour
+    JOB_RESULT_TTL: int = int(os.getenv("JOB_RESULT_TTL", "86400"))  # 24 hours
+    
     @property
     def max_repository_size_bytes(self) -> int:
         """Convert MAX_REPOSITORY_SIZE_MB to bytes."""
