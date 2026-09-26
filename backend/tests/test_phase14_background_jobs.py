@@ -442,32 +442,36 @@ class TestWorkerTasks:
         db.commit()
         analysis_run_id = str(analysis_run.id)
         
-        # Mock the orchestration service execution
-        with patch('app.workers.tasks.JobOrchestrationService') as MockOrchestrator:
-            mock_instance = MockOrchestrator.return_value
-            mock_instance.execute_analysis.return_value = {
-                "status": "completed",
-                "repository_id": str(repo.id),
-                "analysis_run_id": analysis_run_id,
-                "total_files": 100,
-                "total_symbols": 500
-            }
-            
-            # Run task
-            result = analyze_repository_task(
-                analysis_run_id,
-                "https://github.com/testowner/testrepo"
-            )
-            
-            assert result["status"] == "completed"
-            assert result["analysis_run_id"] == analysis_run_id
+        # Mock SessionLocal to return test database session
+        with patch('app.workers.tasks.SessionLocal', return_value=db):
+            # Mock the orchestration service execution
+            with patch('app.workers.tasks.JobOrchestrationService') as MockOrchestrator:
+                mock_instance = MockOrchestrator.return_value
+                mock_instance.execute_analysis.return_value = {
+                    "status": "completed",
+                    "repository_id": str(repo.id),
+                    "analysis_run_id": analysis_run_id,
+                    "total_files": 100,
+                    "total_symbols": 500
+                }
+                
+                # Run task
+                result = analyze_repository_task(
+                    analysis_run_id,
+                    "https://github.com/testowner/testrepo"
+                )
+                
+                assert result["status"] == "completed"
+                assert result["analysis_run_id"] == analysis_run_id
     
-    def test_analyze_repository_task_not_found(self):
+    def test_analyze_repository_task_not_found(self, db):
         """Test task with non-existent analysis run."""
         fake_id = str(uuid4())
         
-        with pytest.raises(ValueError, match="AnalysisRun not found"):
-            analyze_repository_task(fake_id, "https://github.com/test/repo")
+        # Mock SessionLocal to return test database session
+        with patch('app.workers.tasks.SessionLocal', return_value=db):
+            with pytest.raises(ValueError, match="AnalysisRun not found"):
+                analyze_repository_task(fake_id, "https://github.com/test/repo")
     
     def test_cancel_analysis_task(self, db):
         """Test analysis cancellation task."""
@@ -491,15 +495,23 @@ class TestWorkerTasks:
         db.commit()
         analysis_run_id = str(analysis_run.id)
         
-        # Run cancellation task
-        result = cancel_analysis_task(analysis_run_id)
+        # Mock SessionLocal to return test database session
+        # and prevent close() from actually closing it
+        db.close = Mock()  # Mock the close method to prevent detachment
         
-        assert result["status"] == "cancelled"
-        assert result["analysis_run_id"] == analysis_run_id
-        
-        # Verify analysis run is cancelled
-        db.refresh(analysis_run)
-        assert analysis_run.status == AnalysisStatus.CANCELLED
+        with patch('app.workers.tasks.SessionLocal', return_value=db):
+            # Run cancellation task
+            result = cancel_analysis_task(analysis_run_id)
+            
+            assert result["status"] == "cancelled"
+            assert result["analysis_run_id"] == analysis_run_id
+            
+            # Verify analysis run is cancelled
+            # Re-query instead of refresh since the object might be detached
+            updated_run = db.query(AnalysisRun).filter(
+                AnalysisRun.id == analysis_run_id
+            ).first()
+            assert updated_run.status == AnalysisStatus.CANCELLED
 
 
 class TestRedisConnection:
