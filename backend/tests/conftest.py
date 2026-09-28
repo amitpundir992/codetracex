@@ -3,8 +3,13 @@ Shared test fixtures for CodeTraceX tests.
 
 This module provides common fixtures used across multiple test files.
 """
+import os
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Set test environment FIRST before any imports
+os.environ["APP_ENV"] = "test"
+os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
 # Load environment variables before any other imports
 env_path = Path(__file__).resolve().parents[1] / ".env"
