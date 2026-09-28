@@ -2,6 +2,7 @@
 Job orchestration service for background repository analysis.
 
 Phase 14: Background Processing
+Phase 15: Production Hardening - Job timeout and resource cleanup
 
 This service orchestrates the complete repository analysis pipeline as a background job:
 1. Download repository
@@ -21,6 +22,19 @@ Key differences from RepositoryAnalysisService:
 - Handles cleanup robustly even on failure
 - Reports detailed stage information
 - Separates LLM operations (not required for base indexing)
+
+Job Timeout Behavior (Phase 15):
+- RQ job timeout is configured via JOB_TIMEOUT setting (default: 1 hour)
+- If job exceeds timeout, RQ kills the worker process
+- Job status will be marked as 'failed' by RQ
+- Database AnalysisRun status may remain 'running' if worker is killed
+- Manual cleanup of stale jobs may be required (see known limitations)
+
+Stale Job Detection:
+- A job is "stale" if AnalysisRun.status=RUNNING but job no longer exists in RQ
+- This can occur if worker crashes, is killed, or job times out
+- Current implementation: Manual intervention required
+- Future enhancement: Periodic stale job cleanup task
 
 Architecture:
     
