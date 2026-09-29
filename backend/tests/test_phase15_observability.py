@@ -10,12 +10,11 @@ This test suite verifies:
 """
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 import redis
 
 from app.main import app
-from app.db.session import Base, get_db
+from app.db.session import get_db
 from app.utils.logging_config import (
     sanitize_log_message,
     set_request_context,
@@ -37,32 +36,16 @@ from app.core.config_validation import (
 # ==========================================
 # Test Fixtures
 # ==========================================
+# Using fixtures from conftest.py:
+# - db: PostgreSQL database session
+# - client: FastAPI test client
 
 @pytest.fixture(scope="function")
-def db_session():
-    """Create test database session."""
-    # Use in-memory SQLite for testing
-    SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-    )
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
-    Base.metadata.create_all(bind=engine)
-    
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@pytest.fixture(scope="function")
-def client(db_session):
-    """Create test client with database override."""
+def test_client_with_db(db):
+    """Create test client with PostgreSQL database override."""
     def override_get_db():
         try:
-            yield db_session
+            yield db
         finally:
             pass
     
@@ -182,22 +165,22 @@ class TestRequestID:
         # Verify context is cleared
         assert get_request_id() is None
     
-    def test_request_id_in_response(self, client):
+    def test_request_id_in_response(self, test_client_with_db):
         """Test request ID is returned in response headers."""
-        response = client.get("/health")
+        response = test_client_with_db.get("/health")
         assert "X-Request-ID" in response.headers
         assert len(response.headers["X-Request-ID"]) >= 8
     
-    def test_client_request_id_preserved(self, client):
+    def test_client_request_id_preserved(self, test_client_with_db):
         """Test client-provided request ID is preserved."""
         client_request_id = "my-custom-request-id-123"
-        response = client.get("/health", headers={"X-Request-ID": client_request_id})
+        response = test_client_with_db.get("/health", headers={"X-Request-ID": client_request_id})
         assert response.headers["X-Request-ID"] == client_request_id
     
-    def test_invalid_client_request_id_replaced(self, client):
+    def test_invalid_client_request_id_replaced(self, test_client_with_db):
         """Test invalid client request ID is replaced."""
         invalid_request_id = "bad id with spaces"
-        response = client.get("/health", headers={"X-Request-ID": invalid_request_id})
+        response = test_client_with_db.get("/health", headers={"X-Request-ID": invalid_request_id})
         # Should generate new ID, not use invalid one
         assert response.headers["X-Request-ID"] != invalid_request_id
         assert len(response.headers["X-Request-ID"]) >= 8
@@ -210,17 +193,17 @@ class TestRequestID:
 class TestHealthEndpoints:
     """Test health and readiness checks."""
     
-    def test_health_check(self, client):
+    def test_health_check(self, test_client_with_db):
         """Test health check endpoint."""
-        response = client.get("/health")
+        response = test_client_with_db.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
         assert data["service"] == "codetracex-backend"
     
-    def test_readiness_check_success(self, client):
+    def test_readiness_check_success(self, test_client_with_db):
         """Test readiness check when dependencies are available."""
-        response = client.get("/ready")
+        response = test_client_with_db.get("/ready")
         # Note: This may return 503 if Redis is not running locally
         # That's expected behavior
         assert response.status_code in [200, 503]
@@ -230,11 +213,11 @@ class TestHealthEndpoints:
         assert "database" in data["checks"]
         assert "redis" in data["checks"]
     
-    def test_health_check_lightweight(self, client):
+    def test_health_check_lightweight(self, test_client_with_db):
         """Test that health check is lightweight and fast."""
         import time
         start = time.time()
-        response = client.get("/health")
+        response = test_client_with_db.get("/health")
         duration = time.time() - start
         assert response.status_code == 200
         # Should be very fast (< 100ms)
@@ -248,28 +231,28 @@ class TestHealthEndpoints:
 class TestErrorHandling:
     """Test centralized error handling."""
     
-    def test_validation_error(self, client):
+    def test_validation_error(self, test_client_with_db):
         """Test validation error handling."""
         # Send invalid request (missing required field)
-        response = client.post("/api/repositories")
+        response = test_client_with_db.post("/api/repositories")
         assert response.status_code == 422
         data = response.json()
         assert "error" in data
         assert data["error"]["code"] == "VALIDATION_ERROR"
         assert "request_id" in data["error"]
     
-    def test_not_found_error(self, client):
+    def test_not_found_error(self, test_client_with_db):
         """Test 404 error handling."""
-        response = client.get("/nonexistent-endpoint")
+        response = test_client_with_db.get("/nonexistent-endpoint")
         assert response.status_code == 404
         data = response.json()
         assert "error" in data
         assert data["error"]["code"] == "NOT_FOUND"
         assert "request_id" in data["error"]
     
-    def test_error_response_structure(self, client):
+    def test_error_response_structure(self, test_client_with_db):
         """Test error response has correct structure."""
-        response = client.post("/api/repositories")
+        response = test_client_with_db.post("/api/repositories")
         data = response.json()
         
         # Verify structure
@@ -339,7 +322,8 @@ class TestConfigurationValidation:
         valid_urls = [
             "redis://localhost:6379/0",
             "redis://user:pass@localhost:6379/0",
-            "redis://redis.example.com:6379/1"
+            "redis://redis.example.com:6379/1",
+            "rediss://default:pass@secure-redis.upstash.io:6379"  # TLS Redis
         ]
         for url in valid_urls:
             valid, error = validate_redis_url(url)
