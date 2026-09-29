@@ -63,8 +63,8 @@ def validate_redis_url(url: str) -> Tuple[bool, str]:
     if not url:
         return False, "REDIS_URL is required"
     
-    if not url.startswith("redis://"):
-        return False, "REDIS_URL must start with 'redis://'"
+    if not url.startswith(("redis://", "rediss://")):
+        return False, "REDIS_URL must start with 'redis://' or 'rediss://'"
     
     try:
         parsed = urlparse(url)
