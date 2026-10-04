@@ -5,6 +5,7 @@ These tests verify the GET endpoints that retrieve persisted analysis results
 from the database.
 """
 # Load environment variables before any other imports
+import base64
 from pathlib import Path
 from dotenv import load_dotenv
 env_path = Path(__file__).resolve().parents[1] / ".env"
@@ -19,6 +20,7 @@ from app.main import app
 from app.db.session import SessionLocal, engine, Base
 from app.db.models import Repository, AnalysisRun, File, Symbol, AnalysisStatus, SymbolType
 from app.db import get_db
+from app.services.github_service import GitHubAPIError, GitHubService
 
 
 client = TestClient(app)
@@ -423,3 +425,112 @@ class TestSearchSymbolsEndpoint:
         data = response.json()
         assert data["total"] == 2
         assert len(data["symbols"]) == 1
+
+
+class TestRepositoryFilesEndpoints:
+    def test_list_repository_files(self, override_get_db, sample_data):
+        repository_id = str(sample_data["repository"].id)
+
+        response = client.get(f"/api/repositories/{repository_id}/files")
+
+        assert response.status_code == 200
+        files = response.json()
+        assert {file["path"] for file in files} == {"src/index.js", "src/App.js"}
+        assert all(file["id"] for file in files)
+
+    def test_get_repository_file_content(self, override_get_db, sample_data, monkeypatch):
+        file = sample_data["files"][0]
+        requested = {}
+
+        async def get_file_content(_service, owner, name, path, ref, max_size_bytes):
+            requested.update(owner=owner, name=name, path=path, ref=ref)
+            return "export const ready = true;\n"
+
+        monkeypatch.setattr(
+            "app.api.retrieval.GitHubService.get_file_content",
+            get_file_content,
+        )
+        response = client.get(
+            f"/api/repositories/{file.repository_id}/files/{file.id}/content"
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "path": "src/index.js",
+            "language": "JavaScript",
+            "content": "export const ready = true;\n",
+        }
+        assert requested == {
+            "owner": "facebook",
+            "name": "react",
+            "path": "src/index.js",
+            "ref": "main",
+        }
+
+    def test_sensitive_file_content_is_blocked(self, override_get_db, db_session, sample_data, monkeypatch):
+        repository = sample_data["repository"]
+        analysis = sample_data["analysis1"]
+        sensitive_file = File(
+            repository_id=repository.id,
+            analysis_run_id=analysis.id,
+            path=".env",
+            filename=".env",
+            extension="",
+            size_bytes=32,
+            line_count=2,
+            is_sensitive=True,
+        )
+        db_session.add(sensitive_file)
+        db_session.commit()
+
+        async def unexpected_fetch(*args, **kwargs):
+            raise AssertionError("Sensitive file content must not be fetched")
+
+        monkeypatch.setattr(
+            "app.api.retrieval.GitHubService.get_file_content",
+            unexpected_fetch,
+        )
+        response = client.get(
+            f"/api/repositories/{repository.id}/files/{sensitive_file.id}/content"
+        )
+
+        assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_github_file_content_decodes_utf8_and_rejects_traversal(monkeypatch):
+    source = "def authenticate():\n    return True\n".encode("utf-8")
+    requested = {}
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "type": "file",
+                "encoding": "base64",
+                "size": len(source),
+                "content": base64.b64encode(source).decode("ascii"),
+            }
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            return None
+
+        async def get(self, url, **kwargs):
+            requested.update(url=url, kwargs=kwargs)
+            return Response()
+
+    monkeypatch.setattr("app.services.github_service.httpx.AsyncClient", Client)
+    service = GitHubService()
+
+    content = await service.get_file_content("owner", "repo", "src/auth.py", "main")
+
+    assert content == source.decode("utf-8")
+    assert requested["url"].endswith("/repos/owner/repo/contents/src/auth.py")
+    assert requested["kwargs"]["params"] == {"ref": "main"}
+    with pytest.raises(GitHubAPIError, match="Invalid repository file path"):
+        await service.get_file_content("owner", "repo", "../secrets.env", "main")
