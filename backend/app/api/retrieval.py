@@ -27,6 +27,12 @@ from app.schemas.analysis import (
     GraphEdge as GraphEdgeSchema
 )
 from app.services.graph_service import GraphService
+from app.services.github_service import (
+    GitHubAPIError,
+    GitHubFileNotFoundError,
+    GitHubFileTooLargeError,
+    GitHubService,
+)
 from pydantic import BaseModel
 
 
@@ -41,6 +47,7 @@ class RepositoryListResponse(BaseModel):
     name: str
     full_name: str
     github_url: str
+    default_branch: Optional[str]
     description: Optional[str]
     language: Optional[str]
     stars: Optional[int]
@@ -67,6 +74,21 @@ class AnalysisRunResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class RepositoryFileResponse(BaseModel):
+    id: str
+    path: str
+    language: Optional[str]
+    size_bytes: Optional[int]
+    line_count: Optional[int]
+    is_sensitive: bool
+
+
+class RepositoryFileContentResponse(BaseModel):
+    path: str
+    language: Optional[str]
+    content: str
 
 
 @router.get("/", response_model=List[RepositoryListResponse])
@@ -99,6 +121,7 @@ def list_repositories(
             name=repo.name,
             full_name=repo.full_name,
             github_url=repo.github_url,
+            default_branch=repo.default_branch,
             description=repo.description,
             language=repo.language,
             stars=repo.stars,
@@ -143,6 +166,7 @@ def get_repository(
         name=repository.name,
         full_name=repository.full_name,
         github_url=repository.github_url,
+        default_branch=repository.default_branch,
         description=repository.description,
         language=repository.language,
         stars=repository.stars,
@@ -263,6 +287,97 @@ def list_analysis_runs(
         )
         for run in analysis_runs
     ]
+
+
+@router.get("/{repository_id}/files", response_model=List[RepositoryFileResponse])
+def list_repository_files(
+    repository_id: UUID,
+    analysis_run_id: Optional[UUID] = Query(None),
+    search: Optional[str] = Query(None, max_length=500),
+    limit: int = Query(1000, ge=1, le=10000),
+    db: Session = Depends(get_db),
+):
+    """List file metadata for the latest completed analysis or a selected run."""
+    repository = db.query(Repository).filter(Repository.id == repository_id).first()
+    if not repository:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    analysis_query = db.query(AnalysisRun).filter(
+        AnalysisRun.repository_id == repository_id,
+        AnalysisRun.status == AnalysisStatus.COMPLETED,
+    )
+    if analysis_run_id:
+        analysis_run = analysis_query.filter(AnalysisRun.id == analysis_run_id).first()
+        if not analysis_run:
+            raise HTTPException(status_code=404, detail="Analysis run not found")
+    else:
+        analysis_run = analysis_query.order_by(desc(AnalysisRun.started_at)).first()
+
+    if not analysis_run:
+        return []
+
+    files_query = db.query(File).filter(File.analysis_run_id == analysis_run.id)
+    if search:
+        files_query = files_query.filter(File.path.ilike(f"%{search}%"))
+
+    return [
+        RepositoryFileResponse(
+            id=str(file.id),
+            path=file.path,
+            language=file.language,
+            size_bytes=file.size_bytes,
+            line_count=file.line_count,
+            is_sensitive=bool(file.is_sensitive),
+        )
+        for file in files_query.order_by(File.path).limit(limit).all()
+    ]
+
+
+@router.get(
+    "/{repository_id}/files/{file_id}/content",
+    response_model=RepositoryFileContentResponse,
+)
+async def get_repository_file_content(
+    repository_id: UUID,
+    file_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Fetch bounded UTF-8 content for a non-sensitive file in this repository."""
+    repository = db.query(Repository).filter(Repository.id == repository_id).first()
+    if not repository:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.repository_id == repository_id,
+    ).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    if file.is_sensitive:
+        raise HTTPException(status_code=403, detail="Sensitive file content is unavailable")
+    if (file.size_bytes or 0) > 1_000_000:
+        raise HTTPException(status_code=413, detail="File exceeds the content display limit")
+
+    try:
+        content = await GitHubService().get_file_content(
+            repository.owner,
+            repository.name,
+            file.path,
+            repository.default_branch or "main",
+            max_size_bytes=1_000_000,
+        )
+    except GitHubFileNotFoundError:
+        raise HTTPException(status_code=404, detail="Source file is no longer available")
+    except GitHubFileTooLargeError:
+        raise HTTPException(status_code=413, detail="File exceeds the content display limit")
+    except GitHubAPIError:
+        raise HTTPException(status_code=502, detail="Source content is temporarily unavailable")
+
+    return RepositoryFileContentResponse(
+        path=file.path,
+        language=file.language,
+        content=content,
+    )
 
 
 @router.get("/{repository_id}/symbols", response_model=List[SymbolSchema])

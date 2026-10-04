@@ -5,8 +5,11 @@ This service handles communication with GitHub's REST API to retrieve
 repository information. For Phase 1, we only work with public repositories
 and do not require authentication.
 """
+import base64
+import binascii
 import httpx
 from typing import Dict, Any
+from urllib.parse import quote
 
 
 class GitHubAPIError(Exception):
@@ -16,6 +19,16 @@ class GitHubAPIError(Exception):
 
 class RepositoryNotFoundError(Exception):
     """Exception raised when a repository does not exist."""
+    pass
+
+
+class GitHubFileNotFoundError(Exception):
+    """Exception raised when a source file cannot be found on GitHub."""
+    pass
+
+
+class GitHubFileTooLargeError(Exception):
+    """Exception raised when a source file exceeds the configured display limit."""
     pass
 
 
@@ -70,6 +83,62 @@ class GitHubService:
             raise GitHubAPIError("GitHub API request timed out")
         except httpx.RequestError as e:
             raise GitHubAPIError(f"Error connecting to GitHub API: {str(e)}")
+
+    async def get_file_content(
+        self,
+        owner: str,
+        repository: str,
+        path: str,
+        ref: str,
+        max_size_bytes: int = 1_000_000,
+    ) -> str:
+        """Fetch UTF-8 source for a repository-relative file from GitHub."""
+        path_parts = path.split("/")
+        if (
+            not path
+            or path.startswith("/")
+            or "\\" in path
+            or any(part in {"", ".", ".."} for part in path_parts)
+        ):
+            raise GitHubAPIError("Invalid repository file path")
+
+        encoded_path = quote(path, safe="/")
+        url = (
+            f"{self.BASE_URL}/repos/{quote(owner, safe='')}/"
+            f"{quote(repository, safe='')}/contents/{encoded_path}"
+        )
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    url,
+                    params={"ref": ref},
+                    headers=self.headers,
+                    timeout=10.0,
+                )
+
+            if response.status_code == 404:
+                raise GitHubFileNotFoundError("Repository file was not found")
+            if response.status_code != 200:
+                raise GitHubAPIError(
+                    f"GitHub API returned status code {response.status_code}"
+                )
+
+            file_data = response.json()
+            if file_data.get("size", 0) > max_size_bytes:
+                raise GitHubFileTooLargeError("Repository file exceeds the display limit")
+            if file_data.get("type") != "file" or file_data.get("encoding") != "base64":
+                raise GitHubAPIError("GitHub did not return a text file")
+
+            try:
+                content = base64.b64decode(file_data["content"], validate=False)
+                return content.decode("utf-8")
+            except (KeyError, binascii.Error, UnicodeDecodeError) as error:
+                raise GitHubAPIError("Repository file is not valid UTF-8 text") from error
+        except httpx.TimeoutException as error:
+            raise GitHubAPIError("GitHub API request timed out") from error
+        except httpx.RequestError as error:
+            raise GitHubAPIError("Error connecting to GitHub API") from error
     
     def extract_repository_metadata(self, github_data: Dict[str, Any]) -> Dict[str, Any]:
         """
