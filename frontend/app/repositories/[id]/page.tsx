@@ -8,24 +8,72 @@
 
 'use client';
 
-import { use } from 'react';
-import { useRepository, useLatestAnalysis, useLatestJobForRepository } from '@/lib/hooks';
+import { useEffect, useState } from 'react';
+import {
+  ApiRequestError,
+  useRepository,
+  useLatestAnalysis,
+  useLatestJobForRepository,
+  useStartAnalysis,
+} from '@/lib/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, GitBranch, FileCode, Code2, Box, Workflow, GitCommit } from 'lucide-react';
 import Link from 'next/link';
 
-export default function RepositoryDashboardPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function RepositoryDashboardPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   
-  const { data: repository, isLoading: repoLoading } = useRepository(id);
-  const { data: analysis, isLoading: analysisLoading } = useLatestAnalysis(id);
-  const { data: job } = useLatestJobForRepository(id);
+  const { data: repository, isLoading: repoLoading, error: repoError } = useRepository(id);
+  const {
+    data: analysis,
+    isLoading: analysisLoading,
+    error: analysisError,
+    refetch: refetchAnalysis,
+  } = useLatestAnalysis(id);
+  const { data: job, error: jobError } = useLatestJobForRepository(id);
+  const startAnalysis = useStartAnalysis();
+  const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (job?.status === 'completed') void refetchAnalysis();
+  }, [job?.status, refetchAnalysis]);
+
+  const handleStartAnalysis = async () => {
+    if (!repository) return;
+    setStartError(null);
+    try {
+      await startAnalysis.mutateAsync(repository.github_url);
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : 'Unable to start analysis.');
+    }
+  };
 
   if (repoLoading || analysisLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (repoError) {
+    const notFound = repoError instanceof ApiRequestError && repoError.status === 404;
+    return (
+      <div className="container mx-auto p-8" role="alert">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">
+            {notFound ? 'Repository Not Found' : 'Repository Unavailable'}
+          </h1>
+          <p className="mb-4 text-gray-600">
+            {notFound
+              ? 'The requested repository could not be found.'
+              : repoError instanceof ApiRequestError
+                ? repoError.message
+                : 'Unable to reach the backend. Please try again.'}
+          </p>
+          <Link href="/"><Button>Back to Home</Button></Link>
+        </div>
       </div>
     );
   }
@@ -73,16 +121,27 @@ export default function RepositoryDashboardPage({ params }: { params: Promise<{ 
               <div className="flex items-center gap-2 text-sm">
                 <GitBranch className="h-4 w-4 text-gray-500" />
                 <span className="text-gray-600">Branch:</span>
-                <span className="font-medium">{repository.default_branch}</span>
+                <span className="font-medium">{repository.default_branch || 'Unknown'}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-gray-600">Language:</span>
                 <span className="font-medium">{repository.language || 'Multiple'}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-600">Visibility:</span>
-                <span className="font-medium capitalize">{repository.visibility}</span>
+                <span className="text-gray-600">Stars:</span>
+                <span className="font-medium">{repository.stars ?? 0}</span>
               </div>
+              {repository.description && (
+                <p className="border-t pt-3 text-sm text-gray-600">{repository.description}</p>
+              )}
+              <a
+                className="text-sm text-blue-700 underline"
+                href={repository.github_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on GitHub
+              </a>
             </CardContent>
           </Card>
 
@@ -92,14 +151,22 @@ export default function RepositoryDashboardPage({ params }: { params: Promise<{ 
               <CardTitle>Analysis Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {analysis ? (
+              {analysisError ? (
+                <p className="text-sm text-red-700" role="alert">
+                  {analysisError instanceof Error
+                    ? analysisError.message
+                    : 'Unable to load analysis information.'}
+                </p>
+              ) : analysis ? (
                 <>
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 bg-green-500 rounded-full"></div>
                     <span className="font-medium">Completed</span>
                   </div>
                   <div className="text-sm text-gray-600">
-                    {new Date(analysis.completed_at).toLocaleString()}
+                    {analysis.completed_at
+                      ? new Date(analysis.completed_at).toLocaleString()
+                      : 'Completion time unavailable'}
                   </div>
                 </>
               ) : (
@@ -113,19 +180,26 @@ export default function RepositoryDashboardPage({ params }: { params: Promise<{ 
                 <div className="mt-4">
                   <div className="flex items-center gap-2 text-sm text-blue-600">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Analysis in progress...</span>
+                    <span>{job.current_stage || `Analysis ${job.status}...`}</span>
                   </div>
-                  {job.progress_percentage && (
+                  {job.progress !== null && job.progress !== undefined && (
                     <div className="mt-2">
                       <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-blue-500 transition-all"
-                          style={{ width: `${job.progress_percentage}%` }}
+                          style={{ width: `${Math.max(0, Math.min(100, job.progress))}%` }}
                         />
                       </div>
+                      <div className="mt-1 text-right text-xs text-gray-600">{job.progress}%</div>
                     </div>
                   )}
                 </div>
+              )}
+              {job?.status === 'failed' && (
+                <p className="text-sm text-red-700" role="status">Analysis failed. You can retry it below.</p>
+              )}
+              {jobError && (
+                <p className="text-sm text-amber-700" role="status">Analysis status is unavailable.</p>
               )}
             </CardContent>
           </Card>
@@ -143,22 +217,17 @@ export default function RepositoryDashboardPage({ params }: { params: Promise<{ 
                     <span className="font-medium">{analysis.total_files?.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Size</span>
-                    <span className="font-medium">
-                      {(analysis.total_size_bytes / 1024 / 1024).toFixed(2)} MB
-                    </span>
+                    <span className="text-gray-600">Symbols</span>
+                    <span className="font-medium">{analysis.total_symbols ?? 0}</span>
                   </div>
-                  {analysis.languages && (
-                    <div className="pt-2 border-t">
-                      <div className="text-sm font-medium mb-2">Languages</div>
-                      {Object.entries(analysis.languages).slice(0, 3).map(([lang, count]) => (
-                        <div key={lang} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">{lang}</span>
-                          <span>{count as number}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Imports</span>
+                    <span className="font-medium">{analysis.total_imports ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Calls</span>
+                    <span className="font-medium">{analysis.total_calls ?? 0}</span>
+                  </div>
                 </>
               ) : (
                 <div className="text-sm text-gray-500">No statistics available</div>
@@ -230,7 +299,14 @@ export default function RepositoryDashboardPage({ params }: { params: Promise<{ 
         {!analysis && (
           <div className="mt-8 text-center">
             <p className="text-gray-600 mb-4">This repository hasn't been analyzed yet.</p>
-            <Button size="lg">Start Analysis</Button>
+            <Button
+              size="lg"
+              onClick={handleStartAnalysis}
+              disabled={startAnalysis.isPending || job?.status === 'queued' || job?.status === 'running'}
+            >
+              {startAnalysis.isPending ? 'Starting Analysis...' : 'Start Analysis'}
+            </Button>
+            {startError && <p className="mt-3 text-sm text-red-700" role="alert">{startError}</p>}
           </div>
         )}
       </div>
