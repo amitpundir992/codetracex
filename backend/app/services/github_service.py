@@ -140,6 +140,82 @@ class GitHubService:
         except httpx.RequestError as error:
             raise GitHubAPIError("Error connecting to GitHub API") from error
     
+    async def get_pull_request(
+        self,
+        owner: str,
+        repository: str,
+        pr_number: int
+    ) -> Dict[str, Any]:
+        """
+        Retrieve pull request metadata from GitHub API.
+        
+        This method fetches public PR information without requiring authentication.
+        
+        Args:
+            owner: Repository owner username
+            repository: Repository name
+            pr_number: Pull request number
+            
+        Returns:
+            Dictionary containing PR metadata:
+                - number: PR number
+                - title: PR title
+                - body: PR description
+                - state: open/closed/merged
+                - merged: Boolean merge status
+                - author: PR author username
+                - base_ref: Base branch name
+                - base_sha: Base commit SHA
+                - head_ref: Head branch name
+                - head_sha: Head commit SHA
+                - created_at: Creation timestamp
+                - updated_at: Last update timestamp
+                - merged_at: Merge timestamp (if merged)
+                
+        Raises:
+            RepositoryNotFoundError: If PR does not exist (404)
+            GitHubAPIError: If there's an error communicating with GitHub API
+        """
+        url = f"{self.BASE_URL}/repos/{owner}/{repository}/pulls/{pr_number}"
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers, timeout=10.0)
+                
+                if response.status_code == 404:
+                    raise RepositoryNotFoundError(
+                        f"Pull request #{pr_number} not found in {owner}/{repository}"
+                    )
+                
+                if response.status_code != 200:
+                    raise GitHubAPIError(
+                        f"GitHub API returned status code {response.status_code}"
+                    )
+                
+                pr_data = response.json()
+                
+                # Extract relevant PR metadata
+                return {
+                    "number": pr_data.get("number"),
+                    "title": pr_data.get("title"),
+                    "body": pr_data.get("body", ""),
+                    "state": pr_data.get("state"),
+                    "merged": pr_data.get("merged", False),
+                    "author": pr_data.get("user", {}).get("login"),
+                    "base_ref": pr_data.get("base", {}).get("ref"),
+                    "base_sha": pr_data.get("base", {}).get("sha"),
+                    "head_ref": pr_data.get("head", {}).get("ref"),
+                    "head_sha": pr_data.get("head", {}).get("sha"),
+                    "created_at": pr_data.get("created_at"),
+                    "updated_at": pr_data.get("updated_at"),
+                    "merged_at": pr_data.get("merged_at"),
+                }
+                
+        except httpx.TimeoutException:
+            raise GitHubAPIError("GitHub API request timed out")
+        except httpx.RequestError as e:
+            raise GitHubAPIError(f"Error connecting to GitHub API: {str(e)}")
+    
     def extract_repository_metadata(self, github_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Extract relevant metadata from GitHub API response.
