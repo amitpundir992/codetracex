@@ -26,7 +26,8 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, FileCode, MessageSquare } from 'lucide-react';
+import { Loader2, Search, FileCode, MessageSquare, GitCommit } from 'lucide-react';
+import { ChangeIntelligence } from '@/components/change-intelligence';
 
 type InvestigationClaim = NonNullable<InvestigationResponse['claims']>[number];
 
@@ -83,6 +84,7 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversationContext, setConversationContext] = useState<InvestigationRequest['conversation_context']>();
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [rightPanelTab, setRightPanelTab] = useState<'investigation' | 'changes'>('investigation');
   const lineElements = useRef(new Map<number, HTMLDivElement>());
   const {
     data: fileContent,
@@ -124,6 +126,12 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
     if (!file || file.is_sensitive) return;
     setSelectedFile(file);
     setSelectedLine(evidence.start_line ?? evidence.end_line ?? null);
+  };
+
+  const selectFile = (file: RepositoryFile, line?: number) => {
+    if (file.is_sensitive) return;
+    setSelectedFile(file);
+    setSelectedLine(line ?? null);
   };
 
   const evidence = normalizeEvidence(investigate.data?.evidence);
@@ -266,38 +274,62 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
         </main>
 
         <aside className="flex w-96 shrink-0 flex-col border-l bg-white">
-          <div className="border-b p-4">
-            <h2 className="font-semibold flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              AI Investigation
-            </h2>
+          <div className="border-b">
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('investigation')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'investigation'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                AI Investigation
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('changes')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'changes'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <GitCommit className="h-4 w-4" />
+                Change Intelligence
+              </button>
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {investigate.isError && (
-              <p className="mb-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
-                {investigate.error instanceof ApiRequestError
-                  ? investigate.error.message
-                  : 'Investigation is temporarily unavailable. Check the backend connection.'}
-              </p>
-            )}
-            {investigate.isPending && (
-              <p className="mb-3 flex items-center gap-2 text-sm text-gray-600" role="status">
-                <Loader2 className="h-4 w-4 animate-spin" /> Investigating repository...
-              </p>
-            )}
+          {rightPanelTab === 'investigation' ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {investigate.isError && (
+                  <p className="mb-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
+                    {investigate.error instanceof ApiRequestError
+                      ? investigate.error.message
+                      : 'Investigation is temporarily unavailable. Check the backend connection.'}
+                  </p>
+                )}
+                {investigate.isPending && (
+                  <p className="mb-3 flex items-center gap-2 text-sm text-gray-600" role="status">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Investigating repository...
+                  </p>
+                )}
 
-            {investigate.data ? (
-              <div className="space-y-4">
-                <Card className="p-4">
-                  {investigate.data.detected_intent && (
-                    <div className="mb-2 text-xs text-gray-500">
-                      Intent: {investigate.data.detected_intent}
-                    </div>
-                  )}
-                  <div className="text-sm font-medium mb-2">Answer</div>
-                  <div className="text-sm text-gray-700">{investigate.data.answer}</div>
-                </Card>
+                {investigate.data ? (
+                  <div className="space-y-4">
+                    <Card className="p-4">
+                      {investigate.data.detected_intent && (
+                        <div className="mb-2 text-xs text-gray-500">
+                          Intent: {investigate.data.detected_intent}
+                        </div>
+                      )}
+                      <div className="text-sm font-medium mb-2">Answer</div>
+                      <div className="text-sm text-gray-700">{investigate.data.answer}</div>
+                    </Card>
 
                 {claims.length > 0 && (
                   <Card className="p-4">
@@ -454,7 +486,15 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
               )}
             </Button>
           </div>
-        </aside>
+        </>
+      ) : (
+        <ChangeIntelligence
+          repositoryId={repositoryId}
+          files={files}
+          onFileSelect={selectFile}
+        />
+      )}
+    </aside>
       </div>
     </div>
   );
