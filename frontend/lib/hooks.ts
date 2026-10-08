@@ -620,3 +620,9 @@ export function useAsk(repositoryId: string) {
     },
   });
 }
+
+// ============================================================================
+// Change Analysis Hooks (Phase 18)
+// ============================================================================
+
+export * from './hooks/use-change-analysis';
