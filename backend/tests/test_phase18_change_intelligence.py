@@ -100,7 +100,7 @@ def sample_commits(db: Session, sample_repository: Repository):
         CommitFileChange(
             id=uuid4(),
             commit_id=head_commit.id,
-            file_path="src/services/user_service.py",
+            path="src/services/user_service.py",
             change_type=DBChangeType.MODIFIED,
             additions=25,
             deletions=10
@@ -108,7 +108,7 @@ def sample_commits(db: Session, sample_repository: Repository):
         CommitFileChange(
             id=uuid4(),
             commit_id=head_commit.id,
-            file_path="src/api/user_routes.py",
+            path="src/api/user_routes.py",
             change_type=DBChangeType.MODIFIED,
             additions=5,
             deletions=2
@@ -116,7 +116,7 @@ def sample_commits(db: Session, sample_repository: Repository):
         CommitFileChange(
             id=uuid4(),
             commit_id=head_commit.id,
-            file_path="tests/test_user_service.py",
+            path="tests/test_user_service.py",
             change_type=DBChangeType.ADDED,
             additions=50,
             deletions=0
@@ -144,8 +144,11 @@ def sample_files_with_symbols(
     # Create files
     file1 = File(
         id=uuid4(),
+        repository_id=sample_analysis_run.repository_id,
         analysis_run_id=sample_analysis_run.id,
         path="src/services/user_service.py",
+        filename="user_service.py",
+        extension=".py",
         language="Python",
         size_bytes=1024,
         line_count=100
@@ -154,8 +157,11 @@ def sample_files_with_symbols(
     
     file2 = File(
         id=uuid4(),
+        repository_id=sample_analysis_run.repository_id,
         analysis_run_id=sample_analysis_run.id,
         path="src/api/user_routes.py",
+        filename="user_routes.py",
+        extension=".py",
         language="Python",
         size_bytes=512,
         line_count=50
@@ -168,26 +174,32 @@ def sample_files_with_symbols(
         Symbol(
             id=uuid4(),
             file_id=file1.id,
+            analysis_run_id=sample_analysis_run.id,
             name="create_user",
-            qualified_name="services.user_service.create_user",
             symbol_type=SymbolType.FUNCTION,
-            line_number=42
+            language="Python",
+            start_line=42,
+            end_line=50
         ),
         Symbol(
             id=uuid4(),
             file_id=file1.id,
+            analysis_run_id=sample_analysis_run.id,
             name="UserService",
-            qualified_name="services.user_service.UserService",
             symbol_type=SymbolType.CLASS,
-            line_number=10
+            language="Python",
+            start_line=10,
+            end_line=40
         ),
         Symbol(
             id=uuid4(),
             file_id=file2.id,
+            analysis_run_id=sample_analysis_run.id,
             name="create_user_endpoint",
-            qualified_name="api.user_routes.create_user_endpoint",
             symbol_type=SymbolType.FUNCTION,
-            line_number=15
+            language="Python",
+            start_line=15,
+            end_line=25
         )
     ]
     
@@ -336,19 +348,23 @@ class TestSymbolChangeAnalyzer:
         public_symbol = Symbol(
             id=uuid4(),
             file_id=uuid4(),
+            analysis_run_id=uuid4(),
             name="public_function",
-            qualified_name="module.public_function",
             symbol_type=SymbolType.FUNCTION,
-            line_number=1
+            language="Python",
+            start_line=1,
+            end_line=10
         )
         
         private_symbol = Symbol(
             id=uuid4(),
             file_id=uuid4(),
+            analysis_run_id=uuid4(),
             name="_private_function",
-            qualified_name="module._private_function",
             symbol_type=SymbolType.FUNCTION,
-            line_number=1
+            language="Python",
+            start_line=1,
+            end_line=10
         )
         
         assert analyzer._is_public_symbol(public_symbol)
