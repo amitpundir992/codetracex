@@ -289,10 +289,12 @@ class ChangeImpactService:
             if not changed_symbol.is_public:
                 continue
             
-            # Find symbol in database
+            # Find symbol in database by matching file path and symbol name
+            # Note: qualified_name is not a database column, so we match on name and file path
             symbol = self.db.query(Symbol).join(File).join(AnalysisRun).filter(
                 and_(
-                    Symbol.qualified_name == changed_symbol.qualified_name,
+                    Symbol.name == changed_symbol.name,
+                    File.path == changed_symbol.file_path,
                     AnalysisRun.repository_id == repository_id,
                     AnalysisRun.id == latest_analysis.id
                 )
