@@ -180,12 +180,12 @@ class ChangeDetectionService:
         changed_files = []
         
         for change in file_changes:
-            language = detect_language(change.file_path)
-            is_test = self._is_test_file(change.file_path)
-            is_source = self._is_source_file(change.file_path, language)
+            language = detect_language(change.path)
+            is_test = self._is_test_file(change.path)
+            is_source = self._is_source_file(change.path, language)
             
             changed_file = ChangedFile(
-                path=change.file_path,
+                path=change.path,
                 change_type=self._map_change_type(change.change_type),
                 old_path=change.old_path,
                 additions=change.additions,
@@ -279,18 +279,18 @@ class ChangeDetectionService:
                 total_deletions += change.deletions
                 
                 # Update file state (latest change wins)
-                file_changes_map[change.file_path] = change
+                file_changes_map[change.path] = change
         
         # Convert to ChangedFile objects
         changed_files = []
         
         for file_path, change in file_changes_map.items():
-            language = detect_language(change.file_path)
-            is_test = self._is_test_file(change.file_path)
-            is_source = self._is_source_file(change.file_path, language)
+            language = detect_language(change.path)
+            is_test = self._is_test_file(change.path)
+            is_source = self._is_source_file(change.path, language)
             
             changed_file = ChangedFile(
-                path=change.file_path,
+                path=change.path,
                 change_type=self._map_change_type(change.change_type),
                 old_path=change.old_path,
                 additions=change.additions,

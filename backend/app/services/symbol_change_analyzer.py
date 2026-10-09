@@ -170,13 +170,17 @@ class SymbolChangeAnalyzer:
         Returns:
             ChangedSymbol schema object
         """
+        # Construct qualified name from file path and symbol name
+        # e.g., "src/services/user_service.py:UserService"
+        qualified_name = f"{file_path}:{symbol.name}"
+        
         return ChangedSymbol(
             name=symbol.name,
-            qualified_name=symbol.qualified_name,
+            qualified_name=qualified_name,
             symbol_type=symbol.symbol_type,
             change_type=change_type,
             file_path=file_path,
-            line_number=symbol.line_number,
+            line_number=symbol.start_line,
             is_public=self._is_public_symbol(symbol)
         )
     
