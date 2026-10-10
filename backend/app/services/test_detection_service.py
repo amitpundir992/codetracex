@@ -186,12 +186,6 @@ class TestDetectionService:
             if name_lower.startswith(pattern):
                 return True
         
-        # Check for common test decorators in qualified name
-        if symbol.qualified_name:
-            qual_lower = symbol.qualified_name.lower()
-            if '@test' in qual_lower or 'test(' in qual_lower:
-                return True
-        
         return False
     
     def classify_test_type(self, test_name: str, file_path: str) -> TestType:
@@ -259,7 +253,7 @@ class TestDetectionService:
             latest_run = (
                 self.db.query(AnalysisRun)
                 .filter(AnalysisRun.repository_id == repository_id)
-                .order_by(AnalysisRun.created_at.desc())
+                .order_by(AnalysisRun.started_at.desc())
                 .first()
             )
             if not latest_run:

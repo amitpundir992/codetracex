@@ -116,7 +116,7 @@ async def analyze_test_intelligence(
     latest_analysis = (
         db.query(AnalysisRun)
         .filter(AnalysisRun.repository_id == repository_id)
-        .order_by(AnalysisRun.created_at.desc())
+        .order_by(AnalysisRun.started_at.desc())
         .first()
     )
     
@@ -338,7 +338,7 @@ async def list_test_files(
     latest_analysis = (
         db.query(AnalysisRun)
         .filter(AnalysisRun.repository_id == repository_id)
-        .order_by(AnalysisRun.created_at.desc())
+        .order_by(AnalysisRun.started_at.desc())
         .first()
     )
     

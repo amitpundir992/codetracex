@@ -290,7 +290,7 @@ class CIIntelligenceService:
             latest_run = (
                 self.db.query(AnalysisRun)
                 .filter(AnalysisRun.repository_id == repository_id)
-                .order_by(AnalysisRun.created_at.desc())
+                .order_by(AnalysisRun.started_at.desc())
                 .first()
             )
             if not latest_run:
