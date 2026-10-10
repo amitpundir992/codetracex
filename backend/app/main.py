@@ -17,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import (
     repositories, analysis, retrieval, git_history, api_endpoints,
     workflow, semantic_search, hybrid_search, rag_context, ask,
-    impact_analysis, jobs, health, investigation, change_analysis
+    impact_analysis, jobs, health, investigation, change_analysis,
+    test_intelligence
 )
 from app.core.config import get_settings
 from app.core.config_validation import validate_configuration, ConfigurationError
@@ -95,6 +96,7 @@ app.include_router(impact_analysis.router)  # Phase 13: Impact Analysis endpoint
 app.include_router(jobs.router)  # Phase 14: Background Jobs endpoints
 app.include_router(investigation.router, prefix="/api")  # Phase 16: Investigation endpoints
 app.include_router(change_analysis.router, prefix="/api")  # Phase 18: Change Analysis endpoints
+app.include_router(test_intelligence.router, prefix="/api")  # Phase 19: Test Intelligence endpoints
 
 
 @app.get("/")
