@@ -44,7 +44,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Column, String, Integer, BigInteger, Boolean, DateTime, Text,
-    ForeignKey, Enum, Index, UniqueConstraint
+    ForeignKey, Enum, Index, UniqueConstraint, Numeric
 )
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
@@ -141,6 +141,63 @@ class HttpMethod(str, enum.Enum):
     DELETE = "DELETE"
     OPTIONS = "OPTIONS"
     HEAD = "HEAD"
+
+
+class TestRunStatus(str, enum.Enum):
+    """
+    Status of a test run.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    
+    imported - Test results imported from report
+    processing - Currently processing results
+    completed - Processing completed successfully
+    failed - Processing failed
+    """
+    IMPORTED = "imported"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class TestOutcome(str, enum.Enum):
+    """
+    Outcome of a test case.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    
+    passed - Test passed successfully
+    failed - Test failed with assertion or error
+    skipped - Test was skipped
+    error - Test had an execution error (setup/teardown)
+    """
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    ERROR = "error"
+
+
+class FailureClassification(str, enum.Enum):
+    """
+    Classification of test failure type.
+    
+    Inheriting from str ensures SQLAlchemy serializes the value not the name.
+    
+    assertion - Assertion failure
+    import_error - Import or module loading error
+    setup_error - Test setup or teardown error
+    timeout - Test timeout
+    dependency_error - Dependency or environment error
+    network_error - Network or external service error
+    unknown - Unknown or unclassified failure
+    """
+    ASSERTION = "assertion"
+    IMPORT_ERROR = "import_error"
+    SETUP_ERROR = "setup_error"
+    TIMEOUT = "timeout"
+    DEPENDENCY_ERROR = "dependency_error"
+    NETWORK_ERROR = "network_error"
+    UNKNOWN = "unknown"
 
 
 class Repository(Base):
@@ -975,3 +1032,204 @@ class SemanticChunk(Base):
     
     def __repr__(self):
         return f"<SemanticChunk {self.chunk_type.value} {self.id}>"
+
+
+
+
+class TestRun(Base):
+    """
+    Represents a test execution run.
+    
+    Phase 20: Test Results & Failure Intelligence
+    
+    A TestRun stores metadata about an imported test execution,
+    which may come from various formats (JUnit XML, pytest XML, Jest JSON, etc.).
+    
+    Idempotent Import:
+        - content_fingerprint ensures same report isn't duplicated
+        - Fingerprint computed from normalized report structure
+    
+    Repository Association:
+        - Always linked to a repository
+        - Optionally linked to a commit (when known)
+        - Optionally linked to an analysis run (when available)
+    
+    Fields:
+        id: Internal UUID primary key
+        repository_id: Repository this test run belongs to
+        commit_id: Commit this run was executed against (nullable)
+        analysis_run_id: Analysis run this relates to (nullable)
+        
+        source_format: Report format (junit_xml, pytest_xml, jest_json, normalized_json)
+        content_fingerprint: SHA-256 hash of normalized report content (for idempotency)
+        
+        status: Import/processing status
+        
+        total_tests: Total number of test cases
+        passed_tests: Number of passed tests
+        failed_tests: Number of failed tests
+        skipped_tests: Number of skipped tests
+        error_tests: Number of tests with errors
+        
+        total_duration_ms: Total execution duration in milliseconds (nullable)
+        
+        report_metadata: JSON metadata from report (test suite info, environment, etc.)
+        
+        imported_at: When this report was imported
+        processed_at: When processing completed (nullable)
+    
+    Relationships:
+        repository: Parent repository
+        commit: Commit this run was executed against (nullable)
+        analysis_run: Analysis run this relates to (nullable)
+        test_cases: Test cases in this run
+    """
+    __tablename__ = "test_runs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    repository_id = Column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
+    commit_id = Column(UUID(as_uuid=True), ForeignKey("commits.id", ondelete="SET NULL"), nullable=True)
+    analysis_run_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="SET NULL"), nullable=True)
+    
+    source_format = Column(String(50), nullable=False)
+    content_fingerprint = Column(String(64), nullable=False)  # SHA-256 hex
+    
+    status = Column(
+        Enum(TestRunStatus, values_callable=lambda x: [e.value for e in x]),
+        default=TestRunStatus.IMPORTED,
+        nullable=False
+    )
+    
+    total_tests = Column(Integer, default=0, nullable=False)
+    passed_tests = Column(Integer, default=0, nullable=False)
+    failed_tests = Column(Integer, default=0, nullable=False)
+    skipped_tests = Column(Integer, default=0, nullable=False)
+    error_tests = Column(Integer, default=0, nullable=False)
+    
+    total_duration_ms = Column(BigInteger, nullable=True)
+    
+    report_metadata = Column(Text, nullable=True)  # JSON stored as text
+    
+    imported_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    repository = relationship("Repository", backref="test_runs")
+    commit = relationship("Commit", backref="test_runs")
+    analysis_run = relationship("AnalysisRun", backref="test_runs")
+    test_cases = relationship("TestCase", back_populates="test_run", cascade="all, delete-orphan")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_test_runs_repository_id", "repository_id"),
+        Index("idx_test_runs_commit_id", "commit_id"),
+        Index("idx_test_runs_imported_at", "imported_at"),
+        Index("idx_test_runs_status", "status"),
+        # Unique constraint for idempotent import
+        UniqueConstraint("repository_id", "content_fingerprint", name="uq_test_runs_fingerprint"),
+    )
+    
+    def __repr__(self):
+        return f"<TestRun {self.id} {self.passed_tests}P/{self.failed_tests}F/{self.skipped_tests}S>"
+
+
+class TestCase(Base):
+    """
+    Represents an individual test case within a test run.
+    
+    Phase 20: Test Results & Failure Intelligence
+    
+    A TestCase stores the outcome of a single test execution.
+    
+    Test Identification:
+        - suite_name: Test suite or file name
+        - test_name: Test function/method name
+        - class_name: Test class name (nullable, for class-based tests)
+        - full_name: Unique identifier within run
+    
+    Outcomes:
+        - passed: Test passed
+        - failed: Test failed (assertion or expected error)
+        - skipped: Test was skipped
+        - error: Test had unexpected error (setup/teardown)
+    
+    Failure Information:
+        - failure_message: Short failure message
+        - failure_type: Exception type or assertion type
+        - failure_stacktrace: Full stack trace (truncated)
+        - failure_classification: Deterministic classification
+        - classification_confidence: Confidence (0.0-1.0)
+        - classification_evidence: Why it was classified this way
+    
+    Fields:
+        id: Internal UUID primary key
+        test_run_id: Parent test run
+        
+        suite_name: Test suite name (file, module, or suite)
+        test_name: Test case name
+        class_name: Test class name (nullable)
+        full_name: Full unique test name
+        
+        outcome: Test outcome (passed/failed/skipped/error)
+        duration_ms: Execution duration in milliseconds (nullable)
+        
+        failure_message: Short failure message (nullable, max 5000 chars)
+        failure_type: Exception type or error type (nullable)
+        failure_stacktrace: Stack trace (nullable, max 50000 chars)
+        
+        failure_classification: Deterministic classification (nullable)
+        classification_confidence: Confidence 0.0-1.0 (nullable)
+        classification_evidence: Evidence for classification (nullable)
+        
+        test_metadata: JSON metadata (line number, file path, tags, etc.)
+    
+    Relationships:
+        test_run: Parent test run
+        failure: Failure details (if failed)
+    """
+    __tablename__ = "test_cases"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    test_run_id = Column(UUID(as_uuid=True), ForeignKey("test_runs.id", ondelete="CASCADE"), nullable=False)
+    
+    suite_name = Column(String(500), nullable=False)
+    test_name = Column(String(500), nullable=False)
+    class_name = Column(String(500), nullable=True)
+    full_name = Column(String(1500), nullable=False)
+    
+    outcome = Column(
+        Enum(TestOutcome, values_callable=lambda x: [e.value for e in x]),
+        nullable=False
+    )
+    duration_ms = Column(BigInteger, nullable=True)
+    
+    # Failure information (nullable, only for failed/error tests)
+    failure_message = Column(Text, nullable=True)  # Truncated to reasonable size
+    failure_type = Column(String(500), nullable=True)
+    failure_stacktrace = Column(Text, nullable=True)  # Truncated to prevent abuse
+    
+    # Deterministic classification
+    failure_classification = Column(
+        Enum(FailureClassification, values_callable=lambda x: [e.value for e in x]),
+        nullable=True
+    )
+    classification_confidence = Column(Numeric(3, 2), nullable=True)  # 0.00 to 1.00
+    classification_evidence = Column(Text, nullable=True)
+    
+    test_metadata = Column(Text, nullable=True)  # JSON stored as text
+    
+    # Relationships
+    test_run = relationship("TestRun", back_populates="test_cases")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_test_cases_test_run_id", "test_run_id"),
+        Index("idx_test_cases_outcome", "outcome"),
+        Index("idx_test_cases_classification", "failure_classification"),
+        Index("idx_test_cases_full_name", "full_name"),
+        # Unique within a run
+        UniqueConstraint("test_run_id", "full_name", name="uq_test_cases_run_full_name"),
+    )
+    
+    def __repr__(self):
+        return f"<TestCase {self.test_name} {self.outcome.value}>"
