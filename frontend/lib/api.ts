@@ -1023,3 +1023,262 @@ export async function analyzeImpact(
   const data: ImpactResponse = await response.json();
   return data;
 }
+
+// ============================================================================
+// Phase 20: Test Results & Failure Intelligence
+// ============================================================================
+
+import type {
+  TestResultImportRequest,
+  TestResultImportResponse,
+  TestRunListResponse,
+  TestRunDetailResponse,
+  TestFailuresResponse,
+  FailureExplainRequest,
+  FailureExplainResponse
+} from '@/types/test-results';
+
+/**
+ * Import test results from a report (Phase 20).
+ * 
+ * Supports JUnit XML and normalized JSON formats.
+ * Idempotent import - duplicates are detected.
+ * 
+ * @param repositoryId - Repository UUID
+ * @param request - Test result import request
+ * @returns Import response with test run ID and statistics
+ * @throws APIError if the request fails
+ */
+export async function importTestResults(
+  repositoryId: string,
+  request: TestResultImportRequest
+): Promise<TestResultImportResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/repositories/${repositoryId}/test-results/import`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    let detail = 'Failed to import test results';
+    
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch (e) {
+      // If parsing JSON fails, use generic message
+    }
+
+    throw new APIError(
+      `API request failed with status ${response.status}`,
+      response.status,
+      detail
+    );
+  }
+
+  const data: TestResultImportResponse = await response.json();
+  return data;
+}
+
+/**
+ * List test runs for a repository (Phase 20).
+ * 
+ * Returns paginated list of test runs ordered by import time (newest first).
+ * 
+ * @param repositoryId - Repository UUID
+ * @param limit - Maximum results per page (1-100, default: 50)
+ * @param offset - Pagination offset (default: 0)
+ * @param commitSha - Optional filter by commit SHA
+ * @returns Paginated test run list
+ * @throws APIError if the request fails
+ */
+export async function listTestRuns(
+  repositoryId: string,
+  limit: number = 50,
+  offset: number = 0,
+  commitSha?: string
+): Promise<TestRunListResponse> {
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  
+  if (commitSha) {
+    params.append('commit_sha', commitSha);
+  }
+  
+  const response = await fetch(
+    `${API_BASE_URL}/api/repositories/${repositoryId}/test-results?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let detail = 'Failed to list test runs';
+    
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch (e) {
+      // If parsing JSON fails, use generic message
+    }
+
+    throw new APIError(
+      `API request failed with status ${response.status}`,
+      response.status,
+      detail
+    );
+  }
+
+  const data: TestRunListResponse = await response.json();
+  return data;
+}
+
+/**
+ * Get detailed test run information (Phase 20).
+ * 
+ * Returns test run metadata and up to 100 test cases.
+ * 
+ * @param repositoryId - Repository UUID
+ * @param runId - Test run UUID
+ * @returns Test run details
+ * @throws APIError if the request fails
+ */
+export async function getTestRunDetail(
+  repositoryId: string,
+  runId: string
+): Promise<TestRunDetailResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/repositories/${repositoryId}/test-results/${runId}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let detail = 'Failed to get test run details';
+    
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch (e) {
+      // If parsing JSON fails, use generic message
+    }
+
+    throw new APIError(
+      `API request failed with status ${response.status}`,
+      response.status,
+      detail
+    );
+  }
+
+  const data: TestRunDetailResponse = await response.json();
+  return data;
+}
+
+/**
+ * Get test failures with analysis (Phase 20).
+ * 
+ * Returns failed tests with:
+ * - Failure classifications
+ * - Code change correlations (if commit associated)
+ * - Historical trends
+ * 
+ * @param repositoryId - Repository UUID
+ * @param runId - Test run UUID
+ * @returns Test failures with analysis
+ * @throws APIError if the request fails
+ */
+export async function getTestFailures(
+  repositoryId: string,
+  runId: string
+): Promise<TestFailuresResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/repositories/${repositoryId}/test-results/${runId}/failures`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let detail = 'Failed to get test failures';
+    
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch (e) {
+      // If parsing JSON fails, use generic message
+    }
+
+    throw new APIError(
+      `API request failed with status ${response.status}`,
+      response.status,
+      detail
+    );
+  }
+
+  const data: TestFailuresResponse = await response.json();
+  return data;
+}
+
+/**
+ * Generate LLM explanation for a test failure (Phase 20).
+ * 
+ * Requires GEMINI_API_KEY configuration.
+ * Returns grounded explanation with potential causes and investigation steps.
+ * 
+ * @param repositoryId - Repository UUID
+ * @param request - Failure explain request
+ * @returns LLM-generated explanation
+ * @throws APIError if the request fails
+ */
+export async function explainTestFailure(
+  repositoryId: string,
+  request: FailureExplainRequest
+): Promise<FailureExplainResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/repositories/${repositoryId}/test-results/explain`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    let detail = 'Failed to explain test failure';
+    
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || detail;
+    } catch (e) {
+      // If parsing JSON fails, use generic message
+    }
+
+    throw new APIError(
+      `API request failed with status ${response.status}`,
+      response.status,
+      detail
+    );
+  }
+
+  const data: FailureExplainResponse = await response.json();
+  return data;
+}
