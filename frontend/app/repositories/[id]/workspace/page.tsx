@@ -26,8 +26,9 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, FileCode, MessageSquare, GitCommit } from 'lucide-react';
+import { Loader2, Search, FileCode, MessageSquare, GitCommit, FlaskConical } from 'lucide-react';
 import { ChangeIntelligence } from '@/components/change-intelligence';
+import { TestResults } from '@/components/test-results';
 
 type InvestigationClaim = NonNullable<InvestigationResponse['claims']>[number];
 
@@ -84,7 +85,7 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversationContext, setConversationContext] = useState<InvestigationRequest['conversation_context']>();
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<'investigation' | 'changes'>('investigation');
+  const [rightPanelTab, setRightPanelTab] = useState<'investigation' | 'changes' | 'test-results'>('investigation');
   const lineElements = useRef(new Map<number, HTMLDivElement>());
   const {
     data: fileContent,
@@ -300,6 +301,18 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
                 <GitCommit className="h-4 w-4" />
                 Change Intelligence
               </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('test-results')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'test-results'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <FlaskConical className="h-4 w-4" />
+                Test Results
+              </button>
             </div>
           </div>
 
@@ -487,8 +500,14 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
             </Button>
           </div>
         </>
-      ) : (
+      ) : rightPanelTab === 'changes' ? (
         <ChangeIntelligence
+          repositoryId={repositoryId}
+          files={files}
+          onFileSelect={selectFile}
+        />
+      ) : (
+        <TestResults
           repositoryId={repositoryId}
           files={files}
           onFileSelect={selectFile}
