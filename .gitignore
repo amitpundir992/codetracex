@@ -21,6 +21,7 @@ wheels/
 *.egg
 MANIFEST
 DEVELOPMENT.md
+tsconfig.tsbuildinfo
 
 # Virtual Environment
 venv/
