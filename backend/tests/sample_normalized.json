@@ -1,0 +1,48 @@
+{
+  "total_tests": 4,
+  "passed_tests": 2,
+  "failed_tests": 2,
+  "skipped_tests": 0,
+  "error_tests": 0,
+  "total_duration_ms": 1500,
+  "test_cases": [
+    {
+      "suite_name": "tests.test_api",
+      "test_name": "test_get_endpoint",
+      "class_name": "TestAPI",
+      "full_name": "tests.test_api.TestAPI.test_get_endpoint",
+      "outcome": "passed",
+      "duration_ms": 234
+    },
+    {
+      "suite_name": "tests.test_api",
+      "test_name": "test_post_endpoint",
+      "class_name": "TestAPI",
+      "full_name": "tests.test_api.TestAPI.test_post_endpoint",
+      "outcome": "failed",
+      "duration_ms": 567,
+      "failure_message": "Connection refused on port 5432",
+      "failure_type": "ConnectionError",
+      "failure_stacktrace": "Traceback (most recent call last):\n  File \"tests/test_api.py\", line 45, in test_post_endpoint\n    response = client.post('/data')\nConnectionError: Connection refused on port 5432"
+    },
+    {
+      "suite_name": "tests.test_api",
+      "test_name": "test_put_endpoint",
+      "class_name": "TestAPI",
+      "full_name": "tests.test_api.TestAPI.test_put_endpoint",
+      "outcome": "passed",
+      "duration_ms": 345
+    },
+    {
+      "suite_name": "tests.test_api",
+      "test_name": "test_delete_endpoint",
+      "class_name": "TestAPI",
+      "full_name": "tests.test_api.TestAPI.test_delete_endpoint",
+      "outcome": "failed",
+      "duration_ms": 354,
+      "failure_message": "Expected status code 204, got 500",
+      "failure_type": "AssertionError",
+      "failure_stacktrace": "Traceback (most recent call last):\n  File \"tests/test_api.py\", line 67, in test_delete_endpoint\n    assert response.status_code == 204\nAssertionError: Expected status code 204, got 500"
+    }
+  ]
+}
