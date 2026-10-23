@@ -26,9 +26,10 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, FileCode, MessageSquare, GitCommit, FlaskConical } from 'lucide-react';
+import { Loader2, Search, FileCode, MessageSquare, GitCommit, FlaskConical, Network } from 'lucide-react';
 import { ChangeIntelligence } from '@/components/change-intelligence';
 import { TestResults } from '@/components/test-results';
+import { TraceabilityExplorer } from '@/components/traceability-explorer';
 
 type InvestigationClaim = NonNullable<InvestigationResponse['claims']>[number];
 
@@ -85,7 +86,7 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversationContext, setConversationContext] = useState<InvestigationRequest['conversation_context']>();
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<'investigation' | 'changes' | 'test-results'>('investigation');
+  const [rightPanelTab, setRightPanelTab] = useState<'investigation' | 'changes' | 'test-results' | 'traceability'>('investigation');
   const lineElements = useRef(new Map<number, HTMLDivElement>());
   const {
     data: fileContent,
@@ -313,6 +314,18 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
                 <FlaskConical className="h-4 w-4" />
                 Test Results
               </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('traceability')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'traceability'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Network className="h-4 w-4" />
+                Traceability
+              </button>
             </div>
           </div>
 
@@ -506,8 +519,14 @@ function WorkspaceContent({ repositoryId }: { repositoryId: string }) {
           files={files}
           onFileSelect={selectFile}
         />
-      ) : (
+      ) : rightPanelTab === 'test-results' ? (
         <TestResults
+          repositoryId={repositoryId}
+          files={files}
+          onFileSelect={selectFile}
+        />
+      ) : (
+        <TraceabilityExplorer
           repositoryId={repositoryId}
           files={files}
           onFileSelect={selectFile}
