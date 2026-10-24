@@ -2,14 +2,16 @@
 GitHub service for interacting with the GitHub API.
 
 This service handles communication with GitHub's REST API to retrieve
-repository information. For Phase 1, we only work with public repositories
-and do not require authentication.
+repository information. Supports optional authentication via GitHub token
+to increase rate limits from 60 to 5000 requests/hour.
 """
 import base64
 import binascii
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from urllib.parse import quote
+
+from app.core.config import get_settings
 
 
 class GitHubAPIError(Exception):
@@ -37,14 +39,26 @@ class GitHubService:
     
     BASE_URL = "https://api.github.com"
     
-    def __init__(self):
-        """Initialize the GitHub service."""
-        # For Phase 1, we don't use authentication
-        # This limits us to 60 requests/hour but is sufficient for initial testing
+    def __init__(self, github_token: Optional[str] = None):
+        """
+        Initialize the GitHub service.
+        
+        Args:
+            github_token: Optional GitHub Personal Access Token.
+                         If not provided, uses unauthenticated requests (60/hour limit).
+                         With token, rate limit increases to 5000/hour.
+        """
+        settings = get_settings()
+        token = github_token or settings.GITHUB_TOKEN
+        
         self.headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "CodeTraceX/0.1.0"
         }
+        
+        # Add authentication if token is available
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
     
     async def get_repository_info(self, owner: str, repository: str) -> Dict[str, Any]:
         """
