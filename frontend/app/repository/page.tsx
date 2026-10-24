@@ -10,6 +10,7 @@ import { Loader2, AlertCircle, GitBranch, FileCode, HardDrive } from 'lucide-rea
 import DependencyExplorer from '@/components/DependencyExplorer';
 import GitHistory from '@/components/GitHistory';
 import ApiExplorer from '@/components/ApiExplorer';
+import ChatAssistant from '@/components/ChatAssistant';
 
 export default function RepositoryPage() {
   const [url, setUrl] = useState('');
@@ -455,6 +456,14 @@ export default function RepositoryPage() {
           )}
         </div>
       </div>
+
+      {/* AI Chat Assistant - Shows after analysis completes */}
+      {analysis && (
+        <ChatAssistant
+          repositoryId={analysis.repository_id || 'temp-id'}
+          repositoryName={analysis.repository}
+        />
+      )}
     </div>
   );
 }
