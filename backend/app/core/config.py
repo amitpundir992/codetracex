@@ -31,6 +31,11 @@ class Settings:
     DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "5"))
     DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
     
+    # GitHub Configuration
+    # GitHub Personal Access Token (optional, increases rate limit from 60 to 5000 requests/hour)
+    # Create one at: https://github.com/settings/tokens
+    GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
+    
     # Repository Analysis Limits
     # Maximum repository download size in MB (default: 500MB)
     MAX_REPOSITORY_SIZE_MB: int = int(os.getenv("MAX_REPOSITORY_SIZE_MB", "500"))
