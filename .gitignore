@@ -22,6 +22,8 @@ wheels/
 MANIFEST
 DEVELOPMENT.md
 tsconfig.tsbuildinfo
+CHAT_ASSISTANT_README.md
+GITHUB_TOKEN_SETUP.md
 
 # Virtual Environment
 venv/
