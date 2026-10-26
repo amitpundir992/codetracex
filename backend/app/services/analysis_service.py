@@ -219,7 +219,8 @@ class RepositoryAnalysisService:
                                 'language': f.language,
                                 'size_bytes': f.size_bytes,
                                 'lines': f.lines,
-                                'is_sensitive': f.is_sensitive
+                                'is_sensitive': f.is_sensitive,
+                                'content_hash': f.content_hash  # Phase 24
                             }
                             for f in scan_result.files
                         ]

@@ -243,6 +243,8 @@ class PersistenceService:
         """
         Persist file metadata to database.
         
+        Phase 24: Now stores content_hash for change detection.
+        
         Args:
             repository: Repository model instance
             analysis_run: AnalysisRun model instance
@@ -263,7 +265,8 @@ class PersistenceService:
                 language=file_meta.get('language'),
                 size_bytes=file_meta.get('size_bytes'),
                 line_count=file_meta.get('lines'),
-                is_sensitive=file_meta.get('is_sensitive', False)
+                is_sensitive=file_meta.get('is_sensitive', False),
+                content_hash=file_meta.get('content_hash')  # Phase 24
             )
             
             self.db.add(file)
@@ -729,6 +732,78 @@ class PersistenceService:
         self.db.commit()
         
         logger.error(f"Marked analysis run {analysis_run.id} as failed: {error_message}")
+    
+    def mark_stale_runs_as_failed(
+        self,
+        repository_id: Optional[str] = None,
+        stale_threshold_hours: int = 24
+    ) -> int:
+        """
+        Mark stale analysis runs as failed.
+        
+        Phase 24: Reliability improvement
+        
+        An analysis run is considered "stale" if:
+        - Status is RUNNING or QUEUED
+        - Started more than stale_threshold_hours ago
+        
+        This handles cases where:
+        - Worker was killed (SIGKILL, OOM, timeout)
+        - Job processing crashed without cleanup
+        - Database connection lost during execution
+        
+        Args:
+            repository_id: Optional repository UUID to filter by
+            stale_threshold_hours: Hours after which a running job is considered stale
+            
+        Returns:
+            Number of analysis runs marked as failed
+        """
+        from datetime import timedelta
+        
+        stale_cutoff = datetime.utcnow() - timedelta(hours=stale_threshold_hours)
+        
+        # Query for stale analysis runs
+        query = self.db.query(AnalysisRun).filter(
+            AnalysisRun.status.in_([AnalysisStatus.RUNNING, AnalysisStatus.QUEUED]),
+            AnalysisRun.started_at < stale_cutoff
+        )
+        
+        if repository_id:
+            query = query.filter(AnalysisRun.repository_id == repository_id)
+        
+        stale_runs = query.all()
+        
+        # Mark each as failed
+        for run in stale_runs:
+            run.status = AnalysisStatus.FAILED
+            run.error_message = f"Analysis run marked as stale (exceeded {stale_threshold_hours}h timeout)"
+            run.completed_at = datetime.utcnow()
+        
+        if stale_runs:
+            self.db.commit()
+            logger.warning(f"Marked {len(stale_runs)} stale analysis runs as failed")
+        
+        return len(stale_runs)
+    
+    def get_latest_successful_analysis(self, repository_id: str) -> Optional[AnalysisRun]:
+        """
+        Get the most recent successful analysis run for a repository.
+        
+        Phase 24: Support for incremental analysis
+        
+        Args:
+            repository_id: Repository UUID
+            
+        Returns:
+            AnalysisRun instance or None if no successful analysis exists
+        """
+        return self.db.query(AnalysisRun).filter(
+            AnalysisRun.repository_id == repository_id,
+            AnalysisRun.status == AnalysisStatus.COMPLETED
+        ).order_by(
+            AnalysisRun.completed_at.desc()
+        ).first()
 
 
     
