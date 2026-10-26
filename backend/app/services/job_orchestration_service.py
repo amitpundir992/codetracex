@@ -168,6 +168,8 @@ class JobOrchestrationService:
         """
         Execute complete repository analysis pipeline.
         
+        Phase 24: Added timing measurements for observability.
+        
         This is the main entry point called by the worker.
         
         Pipeline stages:
@@ -189,12 +191,17 @@ class JobOrchestrationService:
             repository_url: GitHub repository URL
             
         Returns:
-            Dictionary with analysis results
+            Dictionary with analysis results including timing data
             
         Raises:
             Various exceptions for different failure modes
         """
+        from app.utils.timing import StageTiming, timed_stage
+        import time
+        
         temp_dir = None
+        timing = StageTiming()
+        overall_start = time.time()
         
         try:
             # Mark as running
@@ -202,7 +209,8 @@ class JobOrchestrationService:
             
             # Stage 1: Validate URL and get metadata
             self.update_progress("Validating repository", 5)
-            metadata = self._get_repository_metadata(repository_url)
+            with timed_stage("Validate repository", timing):
+                metadata = self._get_repository_metadata(repository_url)
             
             owner = metadata["owner"]
             repository_name = metadata["name"]
@@ -218,45 +226,61 @@ class JobOrchestrationService:
             try:
                 # Stage 2: Download repository
                 self.update_progress("Downloading repository", 15)
-                archive_path = self._download_repository(
-                    owner, repository_name, default_branch, temp_path
-                )
+                with timed_stage("Download repository", timing):
+                    archive_path = self._download_repository(
+                        owner, repository_name, default_branch, temp_path
+                    )
                 
                 # Stage 3: Extract archive
                 self.update_progress("Extracting repository", 20)
-                repo_root = self._extract_repository(archive_path, temp_path)
+                with timed_stage("Extract archive", timing):
+                    repo_root = self._extract_repository(archive_path, temp_path)
                 
                 # Stage 4: Scan files
                 self.update_progress("Scanning files", 30)
-                scan_result = self._scan_files(repo_root)
+                with timed_stage("Scan files", timing):
+                    scan_result = self._scan_files(repo_root)
                 
                 # Stage 5: Static analysis
                 self.update_progress("Analyzing source code", 40)
-                static_analysis, api_endpoints = self._analyze_code(repo_root, scan_result)
+                with timed_stage("Static analysis", timing):
+                    static_analysis, api_endpoints = self._analyze_code(repo_root, scan_result)
                 
                 # Stage 6: Persist to database
                 self.update_progress("Persisting to database", 50)
-                self._persist_results(repository, static_analysis, scan_result, api_endpoints)
+                with timed_stage("Persist to database", timing):
+                    self._persist_results(repository, static_analysis, scan_result, api_endpoints)
                 
                 # Stage 7: Build knowledge graph
                 self.update_progress("Building knowledge graph", 60)
-                self._build_graph(repository, self.analysis_run)
+                with timed_stage("Build knowledge graph", timing):
+                    self._build_graph(repository, self.analysis_run)
                 
                 # Stage 8: Extract Git history
                 self.update_progress("Extracting Git history", 70)
-                self._extract_git_history(repository, repo_root)
+                with timed_stage("Extract Git history", timing):
+                    self._extract_git_history(repository, repo_root)
                 
                 # Stage 9: Detect workflows
                 self.update_progress("Detecting workflows", 80)
-                self._detect_workflows(repository, self.analysis_run)
+                with timed_stage("Detect workflows", timing):
+                    self._detect_workflows(repository, self.analysis_run)
                 
                 # Stage 10: Build semantic chunks
                 self.update_progress("Building semantic chunks", 85)
-                chunks = self._build_semantic_chunks(repository, self.analysis_run, repo_root)
+                with timed_stage("Build semantic chunks", timing):
+                    chunks = self._build_semantic_chunks(repository, self.analysis_run, repo_root)
                 
                 # Stage 11: Generate embeddings
                 self.update_progress("Generating embeddings", 95)
-                self._generate_embeddings(repository, self.analysis_run, chunks)
+                with timed_stage("Generate embeddings", timing):
+                    self._generate_embeddings(repository, self.analysis_run, chunks)
+                
+                # Record total duration
+                timing.set_total_duration(time.time() - overall_start)
+                
+                # Log timing summary
+                timing.log_summary()
                 
                 # Stage 12: Complete
                 self.mark_completed()
@@ -267,6 +291,7 @@ class JobOrchestrationService:
                     "analysis_run_id": str(self.analysis_run.id),
                     "total_files": scan_result.total_files,
                     "total_symbols": len(static_analysis.all_symbols),
+                    "timing": timing.get_summary()  # Phase 24
                 }
                 
             finally:
@@ -360,7 +385,8 @@ class JobOrchestrationService:
                 'language': f.language,
                 'size_bytes': f.size_bytes,
                 'lines': f.lines,
-                'is_sensitive': f.is_sensitive
+                'is_sensitive': f.is_sensitive,
+                'content_hash': f.content_hash  # Phase 24
             }
             for f in scan_result.files
         ]
