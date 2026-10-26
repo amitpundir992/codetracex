@@ -25,7 +25,11 @@ class TooManyFilesError(Exception):
 
 @dataclass
 class FileMetadata:
-    """Metadata about a single file in the repository."""
+    """
+    Metadata about a single file in the repository.
+    
+    Phase 24: Added content_hash for change detection.
+    """
     path: str  # Relative path from repository root
     filename: str
     extension: str
@@ -33,6 +37,7 @@ class FileMetadata:
     language: Optional[str]
     lines: Optional[int]
     is_sensitive: bool
+    content_hash: Optional[str] = None  # Phase 24: SHA-256 hex digest
 
 
 @dataclass
@@ -110,6 +115,8 @@ class FileScannerService:
         """
         Collect metadata about a single file.
         
+        Phase 24: Now includes content_hash for change detection.
+        
         Args:
             file_path: Absolute path to the file
             repo_root: Absolute path to the repository root
@@ -117,6 +124,8 @@ class FileScannerService:
         Returns:
             FileMetadata object containing file information
         """
+        from app.utils.file_hash import compute_file_hash
+        
         # Calculate relative path from repository root
         relative_path = file_path.relative_to(repo_root)
         
@@ -135,6 +144,9 @@ class FileScannerService:
         # Count lines for text files
         lines = self.count_lines(file_path)
         
+        # Phase 24: Compute content hash for change detection
+        content_hash = compute_file_hash(file_path)
+        
         return FileMetadata(
             path=str(relative_path).replace('\\', '/'),  # Normalize path separators
             filename=filename,
@@ -142,7 +154,8 @@ class FileScannerService:
             size_bytes=size_bytes,
             language=language,
             lines=lines,
-            is_sensitive=sensitive
+            is_sensitive=sensitive,
+            content_hash=content_hash  # Phase 24
         )
     
     def scan_directory(self, repo_root: Path) -> ScanResult:
