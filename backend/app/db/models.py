@@ -353,7 +353,9 @@ class File(Base):
     - Understand repository structure
     - Track file-level dependencies
     - Associate symbols with files
-    - Future: detect changed files between analyses
+    - Detect changed files between analyses (Phase 24)
+    
+    Phase 24: Added content_hash for incremental analysis and change detection.
     
     Fields:
         id: Internal UUID primary key
@@ -366,6 +368,7 @@ class File(Base):
         size_bytes: File size in bytes
         line_count: Number of lines
         is_sensitive: Whether file might contain secrets
+        content_hash: SHA-256 hash of file content (Phase 24, nullable for backward compatibility)
     
     Relationships:
         repository: Parent repository
@@ -386,6 +389,7 @@ class File(Base):
     size_bytes = Column(BigInteger)
     line_count = Column(Integer)
     is_sensitive = Column(Boolean, default=False)
+    content_hash = Column(String(64))  # Phase 24: SHA-256 hex digest (nullable for backward compatibility)
     
     # Relationships
     analysis_run = relationship("AnalysisRun", back_populates="files")
@@ -399,6 +403,7 @@ class File(Base):
         Index("idx_files_analysis_run_id", "analysis_run_id"),
         Index("idx_files_path", "path"),
         Index("idx_files_language", "language"),
+        Index("idx_files_content_hash", "content_hash"),  # Phase 24
         # Path should be unique within an analysis run
         UniqueConstraint("analysis_run_id", "path", name="uq_files_analysis_run_path"),
     )
