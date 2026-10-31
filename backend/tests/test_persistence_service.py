@@ -107,7 +107,8 @@ def sample_static_analysis() -> StaticAnalysisResult:
                 callee="process_data",
                 line=25
             )
-        ]
+        ],
+        failed_files=[]  # Phase 3: failed_files field required
     )
 
 
@@ -507,7 +508,8 @@ class TestTransactionRollback:
                 )
             ],
             all_imports=[],
-            all_calls=[]
+            all_calls=[],
+            failed_files=[]  # Phase 3: failed_files field required
         )
         
         # Try to persist with missing file metadata (should cause FK constraint error)
