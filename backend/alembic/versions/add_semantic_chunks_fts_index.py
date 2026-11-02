@@ -59,7 +59,7 @@ def upgrade() -> None:
     # Create trigger function to auto-update tsvector when content changes
     # This ensures the index stays synchronized with content
     op.execute("""
-        CREATE FUNCTION semantic_chunks_content_tsv_trigger() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION semantic_chunks_content_tsv_trigger() RETURNS trigger AS $$
         BEGIN
             NEW.content_tsv := to_tsvector('english', NEW.content);
             RETURN NEW;
