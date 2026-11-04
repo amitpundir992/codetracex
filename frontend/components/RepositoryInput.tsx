@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GitBranch, Loader2, AlertCircle, Search, Github } from 'lucide-react';
+import { GitBranch, Loader2, AlertCircle, Search } from 'lucide-react';
 
 interface RepositoryInputProps {
   onSubmit: (url: string) => void;
@@ -13,7 +13,7 @@ interface RepositoryInputProps {
   error: string | null;
 }
 
-export default function RepositoryInput({ onSubmit, loading, loadingStage, error }: RepositoryInputProps) {
+const RepositoryInput: React.FC<RepositoryInputProps> = ({ onSubmit, loading, loadingStage, error }) => {
   const [url, setUrl] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,52 +33,52 @@ export default function RepositoryInput({ onSubmit, loading, loadingStage, error
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-6 pt-8">
         <div className="flex justify-center">
           <div className="p-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl shadow-lg">
-            <GitBranch className="w-10 h-10 text-white" />
+            <GitBranch className="w-12 h-12 text-white" />
           </div>
         </div>
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+        <h1 className="text-5xl sm:text-6xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
           CodeTraceX
         </h1>
-        <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+        <p className="text-xl sm:text-2xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto px-4">
           Analyze any GitHub repository with AI-powered intelligence
         </p>
       </div>
 
       {/* Input Card */}
-      <Card className="border-2 border-slate-200 dark:border-slate-800 shadow-lg">
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2">
-            <Search className="w-5 h-5" />
+      <Card className="border-2 border-slate-200 dark:border-slate-800 shadow-xl max-w-5xl mx-auto">
+        <CardHeader className="pb-6 pt-8">
+          <CardTitle className="flex items-center gap-2 text-2xl">
+            <Search className="w-6 h-6" />
             Repository Analysis
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base mt-2">
             Enter a GitHub repository URL to start analyzing
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
+        <CardContent className="space-y-6 pb-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
-                <Github className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <GitBranch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <Input
                   type="text"
                   placeholder="https://github.com/owner/repository"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   disabled={loading}
-                  className="pl-10 h-12 text-base"
+                  className="pl-12 h-14 text-base"
                 />
               </div>
               <Button 
                 type="submit" 
                 disabled={loading || !url.trim()}
                 size="lg"
-                className="h-12 px-8 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="h-14 px-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-base font-semibold"
               >
                 {loading ? (
                   <>
@@ -96,9 +96,9 @@ export default function RepositoryInput({ onSubmit, loading, loadingStage, error
 
             {/* Loading Stage Indicator */}
             {loadingStage && (
-              <div className="flex items-center justify-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+              <div className="flex items-center justify-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-600 dark:text-blue-400" />
+                <p className="text-base font-medium text-blue-900 dark:text-blue-100">
                   {loadingStage}
                 </p>
               </div>
@@ -106,14 +106,14 @@ export default function RepositoryInput({ onSubmit, loading, loadingStage, error
 
             {/* Example Repositories */}
             {!loading && !error && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-slate-500">Try:</span>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Try examples:</span>
                 {exampleRepos.map((repo) => (
                   <button
                     key={repo}
                     type="button"
                     onClick={() => fillExample(repo)}
-                    className="text-sm px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
+                    className="text-sm px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors font-medium"
                   >
                     {repo}
                   </button>
@@ -126,17 +126,17 @@ export default function RepositoryInput({ onSubmit, loading, loadingStage, error
 
       {/* Error Display */}
       {error && (
-        <Card className="border-2 border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+        <Card className="border-2 border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 max-w-5xl mx-auto">
+          <CardContent className="pt-8 pb-8">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-100 dark:bg-red-900 rounded-lg flex-shrink-0">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                <h3 className="font-semibold text-lg text-red-900 dark:text-red-100 mb-2">
                   Analysis Failed
                 </h3>
-                <p className="text-sm text-red-700 dark:text-red-300">
+                <p className="text-base text-red-700 dark:text-red-300">
                   {error}
                 </p>
               </div>
@@ -146,4 +146,6 @@ export default function RepositoryInput({ onSubmit, loading, loadingStage, error
       )}
     </div>
   );
-}
+};
+
+export default RepositoryInput;
