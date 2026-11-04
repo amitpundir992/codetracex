@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -24,7 +25,7 @@ interface AnalysisSummaryProps {
   };
 }
 
-export default function AnalysisSummary({
+const AnalysisSummary: React.FC<AnalysisSummaryProps> = ({
   repository,
   status,
   totalFiles,
@@ -32,7 +33,7 @@ export default function AnalysisSummary({
   languages,
   repositoryId,
   analysisSummary,
-}: AnalysisSummaryProps) {
+}) => {
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -243,4 +244,6 @@ export default function AnalysisSummary({
       )}
     </div>
   );
-}
+};
+
+export default AnalysisSummary;
