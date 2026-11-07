@@ -65,6 +65,10 @@ class Settings:
     JOB_TIMEOUT: int = int(os.getenv("JOB_TIMEOUT", "3600"))  # 1 hour
     JOB_RESULT_TTL: int = int(os.getenv("JOB_RESULT_TTL", "86400"))  # 24 hours
     
+    # Automated Recovery Configuration (Phase 25)
+    STALE_JOB_THRESHOLD_HOURS: int = int(os.getenv("STALE_JOB_THRESHOLD_HOURS", "24"))  # 24 hours
+    ENABLE_AUTO_RECOVERY: bool = os.getenv("ENABLE_AUTO_RECOVERY", "true").lower() == "true"
+    
     @property
     def max_repository_size_bytes(self) -> int:
         """Convert MAX_REPOSITORY_SIZE_MB to bytes."""
