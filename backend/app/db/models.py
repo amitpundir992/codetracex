@@ -61,18 +61,21 @@ class AnalysisStatus(str, enum.Enum):
     Inheriting from str ensures SQLAlchemy serializes the value not the name.
     
     Phase 14: Enhanced for background job processing
+    Phase 25: Added completed_with_warnings for partial failures
     
     queued - Analysis job queued in Redis, waiting for worker
     pending - Analysis queued but not started (legacy, maps to queued)
     running - Analysis currently in progress
-    completed - Analysis finished successfully
-    failed - Analysis failed with error
+    completed - Analysis finished successfully with all stages
+    completed_with_warnings - Analysis finished but some non-critical stages failed
+    failed - Analysis failed with critical error
     cancelled - Analysis was cancelled by user
     """
     QUEUED = "queued"
     PENDING = "pending"  # Legacy, maps to queued
     RUNNING = "running"
     COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"  # Phase 25
     FAILED = "failed"
     CANCELLED = "cancelled"
 
@@ -321,6 +324,9 @@ class AnalysisRun(Base):
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime)
     error_message = Column(Text)
+    
+    # Phase 25: Partial failure tracking
+    warnings = Column(Text)  # JSON-encoded list of non-critical failures
     
     # Relationships
     repository = relationship("Repository", back_populates="analysis_runs")
