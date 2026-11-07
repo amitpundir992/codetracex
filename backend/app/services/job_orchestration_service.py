@@ -77,6 +77,8 @@ class JobOrchestrationService:
     
     This service is the main entry point for worker execution.
     It coordinates all analysis stages and updates job progress.
+    
+    Phase 25: Enhanced with partial failure tracking.
     """
     
     def __init__(self, db: Session, analysis_run: AnalysisRun):
@@ -90,6 +92,7 @@ class JobOrchestrationService:
         self.db = db
         self.analysis_run = analysis_run
         self.settings = get_settings()
+        self.warnings = []  # Track non-critical failures (Phase 25)
         
         # Initialize existing services
         self.repository_service = RepositoryService()
@@ -135,14 +138,30 @@ class JobOrchestrationService:
             raise
     
     def mark_completed(self):
-        """Mark analysis as completed."""
+        """
+        Mark analysis as completed.
+        
+        Phase 25: Checks for warnings to set appropriate status.
+        """
+        import json
+        
         try:
-            self.analysis_run.status = AnalysisStatus.COMPLETED
+            # Determine final status based on warnings
+            if self.warnings:
+                self.analysis_run.status = AnalysisStatus.COMPLETED_WITH_WARNINGS
+                self.analysis_run.warnings = json.dumps(self.warnings)
+                logger.warning(
+                    f"Analysis run {self.analysis_run.id} completed with {len(self.warnings)} warnings"
+                )
+            else:
+                self.analysis_run.status = AnalysisStatus.COMPLETED
+                logger.info(f"Analysis run {self.analysis_run.id} completed successfully")
+            
             self.analysis_run.completed_at = datetime.utcnow()
             self.analysis_run.current_stage = "Completed"
             self.analysis_run.progress = 100
             self.db.commit()
-            logger.info(f"Analysis run {self.analysis_run.id} completed successfully")
+            
         except Exception as e:
             logger.error(f"Failed to mark completed: {e}")
             self.db.rollback()
@@ -285,14 +304,18 @@ class JobOrchestrationService:
                 # Stage 12: Complete
                 self.mark_completed()
                 
-                return {
-                    "status": "completed",
+                # Phase 25: Include warnings in result
+                result = {
+                    "status": "completed" if not self.warnings else "completed_with_warnings",
                     "repository_id": str(repository.id),
                     "analysis_run_id": str(self.analysis_run.id),
                     "total_files": scan_result.total_files,
                     "total_symbols": len(static_analysis.all_symbols),
-                    "timing": timing.get_summary()  # Phase 24
+                    "timing": timing.get_summary(),  # Phase 24
+                    "warnings": self.warnings if self.warnings else None  # Phase 25
                 }
+                
+                return result
                 
             finally:
                 # Always cleanup temporary directory
@@ -404,7 +427,13 @@ class JobOrchestrationService:
         try:
             self.graph_service.build_graph(repository.id, analysis_run.id)
         except Exception as e:
-            logger.warning(f"Graph building failed (non-fatal): {e}")
+            warning_msg = f"Graph building failed (non-fatal): {str(e)[:200]}"
+            logger.warning(warning_msg)
+            self.warnings.append({
+                "stage": "graph_building",
+                "message": "Failed to build knowledge graph",
+                "error": type(e).__name__
+            })
             # Don't fail entire analysis if graph building fails
     
     def _extract_git_history(self, repository, repo_root: Path):
@@ -414,15 +443,32 @@ class JobOrchestrationService:
             # We downloaded an archive, so this will fail
             # This is a known limitation
             logger.info("Skipping Git history extraction (archive download, not git clone)")
+            self.warnings.append({
+                "stage": "git_history",
+                "message": "Git history extraction skipped (archive download)",
+                "error": "NotImplemented"
+            })
         except Exception as e:
-            logger.warning(f"Git history extraction failed (non-fatal): {e}")
+            warning_msg = f"Git history extraction failed (non-fatal): {str(e)[:200]}"
+            logger.warning(warning_msg)
+            self.warnings.append({
+                "stage": "git_history",
+                "message": "Failed to extract Git history",
+                "error": type(e).__name__
+            })
     
     def _detect_workflows(self, repository, analysis_run):
         """Detect application workflows."""
         try:
             self.workflow_service.detect_workflows(repository.id, analysis_run.id)
         except Exception as e:
-            logger.warning(f"Workflow detection failed (non-fatal): {e}")
+            warning_msg = f"Workflow detection failed (non-fatal): {str(e)[:200]}"
+            logger.warning(warning_msg)
+            self.warnings.append({
+                "stage": "workflow_detection",
+                "message": "Failed to detect workflows",
+                "error": type(e).__name__
+            })
     
     def _build_semantic_chunks(self, repository, analysis_run, repo_root: Path) -> List:
         """Build semantic chunks for embedding."""
@@ -481,7 +527,13 @@ class JobOrchestrationService:
             return chunks
             
         except Exception as e:
-            logger.warning(f"Chunk building failed (non-fatal): {e}")
+            warning_msg = f"Chunk building failed (non-fatal): {str(e)[:200]}"
+            logger.warning(warning_msg)
+            self.warnings.append({
+                "stage": "semantic_chunking",
+                "message": "Failed to build semantic chunks",
+                "error": type(e).__name__
+            })
             return []
     
     def _generate_embeddings(self, repository, analysis_run, chunks: List):
@@ -560,7 +612,13 @@ class JobOrchestrationService:
                 logger.info(f"Persisted {chunk_count} semantic chunks with embeddings")
                 
         except Exception as e:
-            logger.warning(f"Embedding generation failed (non-fatal): {e}")
+            warning_msg = f"Embedding generation failed (non-fatal): {str(e)[:200]}"
+            logger.warning(warning_msg)
+            self.warnings.append({
+                "stage": "embedding_generation",
+                "message": "Failed to generate or persist embeddings",
+                "error": type(e).__name__
+            })
     
     def _get_safe_error_message(self, error: Exception) -> str:
         """
