@@ -158,7 +158,7 @@ class RecoveryService:
             run: AnalysisRun instance to mark as stale
             threshold_hours: Threshold used for detection (for error message)
         """
-        original_status = run.status.value
+        original_status = run.status.name  # Use .name for uppercase enum name
         elapsed_hours = (datetime.utcnow() - run.started_at).total_seconds() / 3600
         
         run.status = AnalysisStatus.FAILED
